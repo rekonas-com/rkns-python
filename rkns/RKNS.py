@@ -156,13 +156,13 @@ class RKNS:
         ]
 
     @functools.cached_property
-    def __get_edf_channel_end_idx(self):
+    def __get_edf_channel_stop_idx(self):
         return self.__get_edf_channel_start_idx + self.__get_edf_samples_per_record
 
     @functools.cached_property
     def __get_edf_channel_idx(self):
         return np.stack(
-            (self.__get_edf_channel_start_idx, self.__get_edf_channel_end_idx), axis=1
+            (self.__get_edf_channel_start_idx, self.__get_edf_channel_stop_idx), axis=1
         )
 
     @functools.lru_cache(maxsize=1, typed=False)
@@ -178,7 +178,7 @@ class RKNS:
         No conversion to physical values is made in this step."""
 
         # To reduce expensive disk I/O for small data records, we always get a full chunk,
-        # but use a cahced function.
+        # but use a cached function.
         record_size = self.__get_edf_record_size
         chunk_size = self.__get_edf_chunk_size
 
@@ -202,17 +202,20 @@ class RKNS:
         number_of_records = int(rkns_header["number_of_records"])
 
         if start < 0:
-            raise ValueError("Start musst be greater than or equal to 0.")
+            raise IndexError("Start musst be greater than or equal to 0.")
         if start > number_of_records:
-            raise ValueError(f"Start musst be smaller than {number_of_records}.")
+            raise IndexError(f"Start musst be smaller than {number_of_records}.")
         if stop and (stop > number_of_records or stop < -number_of_records):
             raise IndexError(
                 f"Out of bounds, stop must be smaller than or equal to {number_of_records}."
             )
         if stop and (start > stop and stop > 0):
-            raise ValueError("Start must be smaller than or equal to stop.")
+            raise IndexError("Start must be smaller than or equal to stop.")
         if stop and (stop < 0 and start > (number_of_records + stop)):
-            raise ValueError("Start must be smaller than or equal to stop.")
+            raise IndexError("Start must be smaller than or equal to stop.")
+        
+        if stop and stop < 0:
+            stop += number_of_records
 
         records = [
             self.get_edf_data_record(record)
@@ -243,7 +246,7 @@ class RKNS:
         ]
 
     def edf_data_array(self):
-        """Return the EDf data array as stored in the Zarr archive."""
+        """Return the EDF data array as stored in the Zarr archive."""
         return (
             self._edf_data_array
             if self._edf_data_present
