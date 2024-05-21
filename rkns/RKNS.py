@@ -6,7 +6,7 @@ import math
 import json
 from pathlib import Path
 import functools
-
+import pandas as pd
 from datetime import datetime
 
 
@@ -74,6 +74,9 @@ class RKNS:
                 if self._group.__contains__("annotations")
                 else None
             )
+            if self._annotations_group.__contains__("annotations_array"):
+                self._annotations_array = self._annotations_group["annotations_array"]
+                self._annotations_present = True
             self._derived_values_group = (
                 self._group["derived_values"]
                 if self._group.__contains__("derived_values")
@@ -99,6 +102,7 @@ class RKNS:
     ):
         self._edf_meta_data_present = False
         self._edf_data_present = False
+        self._annotations_present = False
         self.path = path
         self.__init_main_group(load, ZarrMode.READ_ONLY if load else mode)
 
@@ -252,6 +256,28 @@ class RKNS:
             if self._edf_data_present
             else "Does not contain any EDF data"
         )
+    
+    def annotations_array(self):
+        return (
+            self._annotations_array
+            if self._annotations_present
+            else "Does not contain any annotations"
+        )
+    
+    def load_annotations_from_tsv(self, path: str, column: str):
+        """Load annotations from a BIDS compatible TSV file and store as Zarr array."""
+        # TODO: Currently only works with sleep staging annotations that have a constant sampling rate (e.g. 30s)
+        # Extend for arbitrary annotations at arbitrary intervals
+
+        bids_events_table = pd.read_table(path, header=0, delimiter='\t')
+        tmp_annotations_array = bids_events_table[column].dropna().to_numpy()
+        annotations_array = self._annotations_group.array(
+                data=tmp_annotations_array,
+                name="annotations_array",
+                dtype='S2'
+            )
+        self._annotations_present = True
+        self._annotations_array = annotations_array
 
     @classmethod
     def load(self, path: str):
