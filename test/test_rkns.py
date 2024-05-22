@@ -5,7 +5,7 @@ import pytest
 
 from rkns.RKNS import RKNS
 
-ROOT_DIR = Path(__file__).parent
+ROOT_DIR = Path(__file__).parent.parent
 TEST_DIR = Path(__file__).parent
 
 test_file_path = str(Path(TEST_DIR, "test.edf"))

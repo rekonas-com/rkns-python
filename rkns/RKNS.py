@@ -25,6 +25,7 @@ class RKNS:
     It is build on top of a nested structure of Zarr groups and arrays. See __ for full specification.
     /
     ├── annotations
+    |   └── annotations_array
     ├── derived_values
     └── edf_data
         └── edf_data_array

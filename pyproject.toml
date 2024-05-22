@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "rkns"
+version = "0.1.0"
+description = "RKNS data format for ExG data"
+authors = ["Patrick Kahr <patrick.kahr@rekonas.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+zarr = "^2.18.1"
+pyEDFlib = "^0.1.37"
+numpy = "^1.26.4"
+pandas = "^2.2.2"
+
+[tool.poetry.group.test.dependencies]  
+pytest = "^8.2.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
