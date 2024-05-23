@@ -75,9 +75,7 @@ class RKNS:
                 if self._group.__contains__("annotations")
                 else None
             )
-            if self._annotations_group.__contains__("annotations_array"):
-                self._annotations_array = self._annotations_group["annotations_array"]
-                self._annotations_present = True
+
             self._derived_values_group = (
                 self._group["derived_values"]
                 if self._group.__contains__("derived_values")
@@ -103,7 +101,6 @@ class RKNS:
     ):
         self._edf_meta_data_present = False
         self._edf_data_present = False
-        self._annotations_present = False
         self.path = path
         self.__init_main_group(load, ZarrMode.READ_ONLY if load else mode)
 
@@ -258,27 +255,27 @@ class RKNS:
             else "Does not contain any EDF data"
         )
     
-    def annotations_array(self):
+    def annotations_array(self, name: str):
+        """Return the specified annotations array if it exists."""
         return (
-            self._annotations_array
-            if self._annotations_present
-            else "Does not contain any annotations"
+            self._annotations_group.get(name)
+            if name in self._annotations_group.array_keys()
+            else "Could not find annotations array"
         )
     
-    def load_annotations_from_tsv(self, path: str, column: str):
-        """Load annotations from a BIDS compatible TSV file and store as Zarr array."""
-        # TODO: Currently only works with sleep staging annotations that have a constant sampling rate (e.g. 30s)
-        # Extend for arbitrary annotations at arbitrary intervals
+    def load_annotations_from_tsv(self, path: str, column: str, name: str, data_type: np.dtype, metadata: dict):
+        """Load annotations from a BIDS compatible TSV file and store as Zarr array. BIDS sidecar datat can be set as metadata."""
 
         bids_events_table = pd.read_table(path, header=0, delimiter='\t')
+
+        # Due to how BIDS is structured, it can happen that columns have NaN values. We are dropping these here.
         tmp_annotations_array = bids_events_table[column].dropna().to_numpy()
         annotations_array = self._annotations_group.array(
                 data=tmp_annotations_array,
-                name="annotations_array",
-                dtype='S2'
+                name=name,
+                dtype=data_type
             )
-        self._annotations_present = True
-        self._annotations_array = annotations_array
+        annotations_array.attrs["metadata"] = metadata
 
     @classmethod
     def load(self, path: str):
@@ -316,13 +313,11 @@ class RKNS:
         reader = pyedflib.EdfReader(edf_path)
         record_duration = reader.datarecord_duration
         number_of_records = reader.datarecords_in_file
-        # number_of_samples = reader.getNSamples()
         sample_frequency = reader.getSampleFrequencies()
         reader.close()
 
         samples_per_record = (sample_frequency * record_duration).astype(np.int16)
         record_size = samples_per_record.sum()
-        # size_of_zarr_array = np.asanyarray(number_of_samples).sum()
 
         # We align the chunk size to a multitude of 30s windows.
         # According to the official documentation, zarr performs best with chunk sizes of around 1M.
@@ -341,21 +336,6 @@ class RKNS:
         # TODO: Currently we are writing the entire EDF data to a temporary numpy array which is then passed to zarr.
         # To bound the required memory, we should regularly append partial arrays to the zarr array.
         # Appending small partial arrays to the zarr array degrades I/O performance as zarr flushed data to disk under the hood.
-        # array_index = 0
-        # tmp_data_array = np.zeros(shape=size_of_zarr_array, dtype=np.int16)
-        # for record in np.arange(number_of_records):
-        #     for idx, channel in enumerate(channel_data):
-        #         num_samples = samples_per_record[idx]
-        #         start_idx = record * num_samples
-        #         tmp_data_array[array_index : array_index + num_samples] = channel[
-        #             start_idx : start_idx + num_samples
-        #         ]
-        #         array_index += num_samples
-        #     if progress:
-        #         progress_p = record / number_of_records * 100.0
-        #         print(
-        #             f"\r\tProgress: {str(format(progress_p, '.2f')).zfill(3)} %", end=""
-        #         )
         
         tmp_data_array = np.concatenate(
             [
