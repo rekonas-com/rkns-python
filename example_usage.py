@@ -27,7 +27,7 @@ if __name__ == "__main__":
     
     # Add annotations from BIDS events file
     print("Loading annotations from BIDS events file...")
-    rkns.load_annotations_from_tsv(annotations_file_path, "stage_AASM_e1")
+    rkns.load_annotations_from_tsv(annotations_file_path, "stage_AASM_e1", "stage_AASM_e1", np.dtype('S2'), {"name": "stage_AASM_e1"})
 
     print(f"--- duration: {time.time() - start_time} seconds ---\n\n")
 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # Decode annotations
     decode_labels = lambda b: str(b, 'ASCII')
-    annotations_array = np.asanyarray(list(map(decode_labels, rkns.annotations_array())))
+    annotations_array = np.asanyarray(list(map(decode_labels, rkns.annotations_array(name="stage_AASM_e1"))))
     edf_data_array = rkns.get_edf_data_records()
 
     # Create samples for deeep learning
