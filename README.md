@@ -7,5 +7,5 @@ This package contains a Python implementation of the RKNS data format for ExG da
 
 ## Using as a dependency
 1. `poetry build`
-2. Add the path `<path_to_repository>/dist/rkns-0.1.0.tar.gz` to the toml file of your project.
-Example: `rkns = { path = "<path_to_repository>/dist/rkns-0.1.0.tar.gz" }`
+2. Add the path `<path_to_repository>/dist/rkns-0.2.0.tar.gz` to the toml file of your project.
+Example: `rkns = { path = "<path_to_repository>/dist/rkns-0.2.0.tar.gz" }`

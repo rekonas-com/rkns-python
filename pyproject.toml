@@ -1,16 +1,19 @@
 [tool.poetry]
 name = "rkns"
-version = "0.1.0"
+version = "0.2.0"
 description = "RKNS data format for ExG data"
 authors = ["Patrick Kahr <patrick.kahr@rekonas.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-zarr = "^2.18.1"
+zarr = ">=3"
 pyEDFlib = "^0.1.37"
 numpy = "^1.26.4"
 pandas = "^2.2.2"
+minio = "^7.2.7"
+rich = "^13.9.4"
+pylint = "^3.3.3"
 
 [tool.poetry.group.test.dependencies]  
 pytest = "^8.2.1"

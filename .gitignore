@@ -1,7 +1,8 @@
-zarr/
+out/
 env/
-data/
+data
 .pytest_cache
 **/__pycache__
 playground.py
 dist/
+certs
