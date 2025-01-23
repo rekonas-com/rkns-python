@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import datetime
 
+import zarr
 import pyedflib
 import json
 
@@ -12,21 +13,21 @@ class RKNSBaseAdapter(ABC):
     Adapters also need to implement a one-way conversion to the RKNS format (no export from RKNS to arbitrary formats).
     """
 
-    def __init__(self, raw_group):
+    def __init__(self, raw_group: zarr.Group) -> None:
         self.raw_group = raw_group
 
     @abstractmethod
-    def from_src():
+    def from_src() -> None:
         """Load data from source format into a Zarr group containing the raw original data."""
         pass
 
     @abstractmethod
-    def recreate_src():
+    def recreate_src() -> None:
         """Export the raw original data to its original format. This should exactely rematerialize the original file."""
         pass
 
     @abstractmethod
-    def to_rkns():
+    def to_rkns() -> None:
         """Transform raw original data into the RKNS format."""
         pass
 
@@ -34,10 +35,10 @@ class RKNSBaseAdapter(ABC):
 class RKNSEdfAdapter(RKNSBaseAdapter):
     """RKNS adapter for the EDF format."""
 
-    def __init__(self, raw_group):
+    def __init__(self, raw_group: zarr.Group) -> None:
         super().__init__(raw_group)
 
-    def from_src(self, path):
+    def from_src(self, path:str) -> None:
         channel_data, signal_headers, header = pyedflib.highlevel.read_edf(
             path, digital=True
         )
@@ -62,7 +63,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             )
             z[:] = channel
 
-    def recreate_src(self, path):
+    def recreate_src(self, path:str) -> None:
         file_type = int(self.raw_group.attrs["file_type"])
         header = json.loads(self.raw_group.attrs["header"])
         if header["startdate"]:
@@ -84,6 +85,6 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             file_type=file_type,
         )
 
-    def to_rkns():
+    def to_rkns() -> None:
         # TODO: Implement once RKNS is specified.
         pass
