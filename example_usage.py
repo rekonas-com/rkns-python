@@ -2,7 +2,6 @@ import pyedflib
 import numpy as np
 
 from rkns.RKNS import RKNS
-from rkns.RKNSAdapter import RKNSEdfAdapter
 
 if __name__ == "__main__":
 

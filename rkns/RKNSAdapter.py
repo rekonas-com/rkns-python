@@ -1,11 +1,8 @@
 from abc import ABC, abstractmethod
-import logging
 import datetime
 
 import pyedflib
 import json
-
-logger = logging.getLogger(__name__)
 
 
 class RKNSBaseAdapter(ABC):
@@ -41,58 +38,51 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         super().__init__(raw_group)
 
     def from_src(self, path):
-        try:
-            logger.debug("Populating from EDF file...")
-            channel_data, signal_headers, header = pyedflib.highlevel.read_edf(
-                path, digital=True
-            )
+        channel_data, signal_headers, header = pyedflib.highlevel.read_edf(
+            path, digital=True
+        )
 
-            # TODO: Override highlevel EDFReader to also output filetype^
-            file_type = -1
-            with pyedflib.EdfReader(path) as f:
-                file_type = f.filetype
-            
-            # We can hard-code the adapter_type string as it is defined by the concrete implementation
-            self.raw_group.attrs["adapter_type"] = "rkns.RKNSAdapter.RKNSEdfAdapter"
-            self.raw_group.attrs["file_type"] = file_type
-            self.raw_group.attrs["header"] = json.dumps(header, default=str)
+        # TODO: Override highlevel EDFReader to also output filetype^
+        file_type = -1
+        with pyedflib.EdfReader(path) as f:
+            file_type = f.filetype
 
-            signal_data_group = self.raw_group.create_group(name="signal_data")
-            signal_data_group.attrs["signal_headers"] = json.dumps(
-                signal_headers, default=str
+        # We can hard-code the adapter_type string as it is defined by the concrete implementation
+        self.raw_group.attrs["adapter_type"] = "rkns.RKNSAdapter.RKNSEdfAdapter"
+        self.raw_group.attrs["file_type"] = file_type
+        self.raw_group.attrs["header"] = json.dumps(header, default=str)
+
+        signal_data_group = self.raw_group.create_group(name="signal_data")
+        signal_data_group.attrs["signal_headers"] = json.dumps(
+            signal_headers, default=str
+        )
+        for channel, header in zip(channel_data, signal_headers):
+            z = signal_data_group.create_array(
+                name=header["label"], shape=channel.shape, dtype=channel.dtype
             )
-            for channel, header in zip(channel_data, signal_headers):
-                z = signal_data_group.create_array(
-                    name=header["label"], shape=channel.shape, dtype=channel.dtype
-                )
-                z[:] = channel
-        except Exception:
-            logger.exception("Error populating from EDF")
+            z[:] = channel
 
     def recreate_src(self, path):
-        try:
-            file_type = int(self.raw_group.attrs["file_type"])
-            header = json.loads(self.raw_group.attrs["header"])
-            if header["startdate"]:
-                header["startdate"] = datetime.datetime.strptime(
-                    header["startdate"], "%Y-%m-%d %H:%M:%S"
-                )
-            signal_data_group = self.raw_group["signal_data"]
-            signal_headers = json.loads(signal_data_group.attrs["signal_headers"])
-            signal_data = [
-                signal_data_group[signal_header["label"]][:]
-                for signal_header in signal_headers
-            ]
-            pyedflib.highlevel.write_edf(
-                edf_file=path,
-                signals=signal_data,
-                signal_headers=signal_headers,
-                header=header,
-                digital=True,
-                file_type=file_type,
+        file_type = int(self.raw_group.attrs["file_type"])
+        header = json.loads(self.raw_group.attrs["header"])
+        if header["startdate"]:
+            header["startdate"] = datetime.datetime.strptime(
+                header["startdate"], "%Y-%m-%d %H:%M:%S"
             )
-        except Exception:
-            logger.exception("Error recreating EDF.")
+        signal_data_group = self.raw_group["signal_data"]
+        signal_headers = json.loads(signal_data_group.attrs["signal_headers"])
+        signal_data = [
+            signal_data_group[signal_header["label"]][:]
+            for signal_header in signal_headers
+        ]
+        pyedflib.highlevel.write_edf(
+            edf_file=path,
+            signals=signal_data,
+            signal_headers=signal_headers,
+            header=header,
+            digital=True,
+            file_type=file_type,
+        )
 
     def to_rkns():
         # TODO: Implement once RKNS is specified.
