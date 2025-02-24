@@ -15,12 +15,15 @@ class RKNS:
     def __init__(self, root: zarr.Group, adapter: RKNSAdapter = None) -> None:
         self.root = root
         self.adapter = adapter
+        if self.adapter:
+            self.adapter.from_src()
 
     @staticmethod
     def __make_rkns_header() -> dict:
         """Generate header for RKNS file. This should contain information relevant for the
         compatibility between different RKNS versions.
         It must be a JSON-serializable dict."""
+
         return {"rknsv_version": __version__}
 
     @classmethod
@@ -32,6 +35,7 @@ class RKNS:
         root.attrs["rkns_header"] = self.__make_rkns_header()
         root.create_group(name="raw")
         root.create_group(name="rkns")
+
         return root
 
     @classmethod
@@ -48,15 +52,24 @@ class RKNS:
         return self(root, adapter)
 
     @classmethod
-    def create(self, store=None, adapter_type_str: str = None) -> Self:
+    def create(self, store=None, adapter_type_str: str = None, **kwargs) -> Self:
         """Create a new RKNS file with an optional adapter."""
         if isinstance(store, str):
             if Path(store).exists():
                 raise FileExistsError()
         root = self.__init_root(store)
-        print(type(root))
+
+        # Create adapter
         adapter = None
         if adapter_type_str:
-            adapter = import_string(adapter_type_str)(raw_group=root["raw"])
+            # Extract adapter-specific arguments
+            adapter_args = {
+                kw.removeprefix("adapter_"): kwargs[kw]
+                for kw in kwargs
+                if kw.startswith("adapter_")
+            }
+            adapter = import_string(adapter_type_str)(
+                raw_group=root["raw"], **adapter_args
+            )
 
         return self(root, adapter)
