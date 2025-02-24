@@ -8,10 +8,10 @@ if __name__ == "__main__":
     edf_path = "test/test.edf"
 
     print("Initialize RKNS file")
-    rkns = RKNS.create(store="example.rkns", adapter_type_str="rkns.RKNSAdapter.RKNSEdfAdapter")
+    rkns = RKNS.create(store="example.rkns", adapter_type_str="rkns.RKNSAdapter.RKNSEdfAdapter", adapter_src_path=edf_path)
     
-    print("Create RKNS from file...")
-    rkns.adapter.from_src(edf_path)
+    # print("Create RKNS from file...")
+    # rkns.adapter.from_src(edf_path)
 
     print("Re-create the EDF from the RKNS file...")
     rkns.adapter.recreate_src(f"out.edf")
