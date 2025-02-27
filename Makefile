@@ -5,7 +5,7 @@ PYTHON_VERSION := $(shell cat .python-version)
 setup:
 	@pyenv install --skip-existing $(PYTHON_VERSION)
 	@poetry config virtualenvs.in-project true
-	@poetry install
+	@poetry install --with dev
 
 run:
 	@poetry run python example_usage.py
