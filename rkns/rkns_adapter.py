@@ -1,9 +1,15 @@
-from abc import ABC, abstractmethod
 import datetime
-
-import zarr
-import pyedflib
 import json
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, cast
+
+import pyedflib
+import zarr
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from numpy.typing import ArrayLike
 
 
 class RKNSBaseAdapter(ABC):
@@ -13,8 +19,9 @@ class RKNSBaseAdapter(ABC):
     Adapters also need to implement a one-way conversion to the RKNS format (no export from RKNS to arbitrary formats).
     """
 
-    def __init__(self, raw_group: zarr.Group) -> None:
+    def __init__(self, raw_group: zarr.Group, src_path: str | None = None) -> None:
         self.raw_group = raw_group
+        self.src_path = src_path
 
     @abstractmethod
     def from_src(self) -> None:
@@ -22,7 +29,7 @@ class RKNSBaseAdapter(ABC):
         pass
 
     @abstractmethod
-    def recreate_src(self, path:str) -> None:
+    def recreate_src(self, path: str) -> None:
         """Export the raw original data to its original format. This should exactely rematerialize the original file."""
         pass
 
@@ -35,16 +42,25 @@ class RKNSBaseAdapter(ABC):
 class RKNSEdfAdapter(RKNSBaseAdapter):
     """RKNS adapter for the EDF format."""
 
-    def __init__(self, raw_group: zarr.Group, src_path:str = None) -> None:
-        super().__init__(raw_group)
-        self.src_path = src_path
+    def __init__(self, raw_group: zarr.Group, src_path: str | None = None) -> None:
+        super().__init__(raw_group=raw_group, src_path=src_path)
 
     def from_src(self) -> None:
         if self.src_path:
+            """
+            -------
+            signals : np.ndarray or list
+                the signals of the chosen channels contained in the EDF.
+            signal_headers : list
+                one signal header for each channel in the EDF.
+            header : dict
+                the main header of the EDF file containing meta information.
+
+            """
+
             channel_data, signal_headers, header = pyedflib.highlevel.read_edf(
                 self.src_path, digital=True
             )
-
             # TODO: Override highlevel EDFReader to also output filetype
             # For now use the underlying EDFReader and extract filtype manually
             file_type = -1
@@ -68,18 +84,20 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         else:
             raise TypeError("src_path cannot be None")
 
-    def recreate_src(self, path:str) -> None:
-        file_type = int(self.raw_group.attrs["file_type"])
-        header = json.loads(self.raw_group.attrs["header"])
+    def recreate_src(self, path: str) -> None:
+        file_type = int(cast(int, self.raw_group.attrs["file_type"]))
+        header = json.loads(cast(str, self.raw_group.attrs["header"]))
         # re-create header dict from JSON-serialized header
         if header["startdate"]:
             header["startdate"] = datetime.datetime.strptime(
                 header["startdate"], "%Y-%m-%d %H:%M:%S"
             )
         signal_data_group = self.raw_group["signal_data"]
-        signal_headers = json.loads(signal_data_group.attrs["signal_headers"])
+        signal_headers = json.loads(
+            cast(str, signal_data_group.attrs["signal_headers"])
+        )
         signal_data = [
-            signal_data_group[signal_header["label"]][:]
+            signal_data_group[signal_header["label"]][:]  # type: ignore
             for signal_header in signal_headers
         ]
         pyedflib.highlevel.write_edf(

@@ -1,7 +1,7 @@
 import numpy as np
 import pyedflib
 
-from rkns.RKNS import RKNS
+from rkns.rkns import RKNS
 
 if __name__ == "__main__":
     edf_path = "test/test.edf"
@@ -9,7 +9,7 @@ if __name__ == "__main__":
     print("Initialize RKNS file")
     rkns = RKNS.create(
         store="example.rkns",
-        adapter_type_str="rkns.RKNSAdapter.RKNSEdfAdapter",
+        adapter_type_str="rkns.rkns_adapter.RKNSEdfAdapter",
         adapter_src_path=edf_path,
     )
 
