@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import zarr
 import zarr.storage
 
-from rkns.rkns_util import ZarrMode, import_string
+from rkns.rkns_util import ZarrMode, import_from_string
 from rkns.version import __version__
 
 if TYPE_CHECKING:
@@ -65,7 +65,7 @@ class RKNS:
         adapter = None
         if adapter_type_str:
             # Dynamically import the adapter class
-            adapter = import_string(adapter_type_str)(raw_group=root["raw"])
+            adapter = import_from_string(adapter_type_str)(raw_group=root["raw"])
 
         return cls(root, adapter)
 
@@ -86,7 +86,7 @@ class RKNS:
                 for kw in kwargs
                 if kw.startswith("adapter_")
             }
-            adapter = import_string(adapter_type_str)(
+            adapter = import_from_string(adapter_type_str)(
                 raw_group=root["raw"], **adapter_args
             )
         else:

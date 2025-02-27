@@ -4,8 +4,24 @@ from importlib import import_module
 from typing import Any
 
 
-# From Django: https://docs.djangoproject.com/en/5.1/ref/utils/#module-django.utils.module_loading
 def cached_import(module_path: str, class_name: str) -> Any:
+    """
+    Import a module and return the specified class or attribute.
+
+    From Django: https://docs.djangoproject.com/en/5.1/ref/utils/#module-django.utils.module_loading
+
+    Parameters
+    ----------
+    module_path : str
+        The path of the module to import.
+    class_name : str
+        The name of the class or attribute to retrieve from the module.
+
+    Returns
+    -------
+    Any
+        The specified class or attribute from the module.
+    """
     # Check whether module is loaded and fully initialized.
     if not (
         (module := sys.modules.get(module_path))
@@ -16,10 +32,25 @@ def cached_import(module_path: str, class_name: str) -> Any:
     return getattr(module, class_name)
 
 
-def import_string(dotted_path: str) -> Any:
+def import_from_string(dotted_path: str) -> Any:
     """
-    Import a dotted module path and return the attribute/class designated by the
-    last name in the path. Raise ImportError if the import failed.
+    Import a dotted module path and return the designated class.
+
+    Parameters
+    ----------
+    dotted_path : str
+        The dotted path of the module and class to import.
+
+    Returns
+    -------
+    Any
+        The designated class from the module.
+
+    Raises
+    ------
+    ImportError
+        If the dotted path is not a valid module path or if the module does not
+        define the specified attribute or class.
     """
     try:
         module_path, class_name = dotted_path.rsplit(".", 1)
