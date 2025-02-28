@@ -1,0 +1,38 @@
+from typing import TYPE_CHECKING
+
+from ..util import import_from_string
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Callable
+
+    from ..file_formats import FileFormat
+    from .base import RKNSBaseAdapter
+
+    FileFormatDetector = Callable[[Path], str | None]
+
+
+class AdapterRegistry:
+    """
+    Registry for modular addition and lazy loading of new adapters.
+    Adapters are registered in the modules __init__.
+
+    Note: This is implemented via a class to simulate a singleton.
+    """
+
+    # dictionary that keeps track of module paths
+    _adapters: dict[FileFormat, str] = dict()
+
+    @classmethod
+    def register(cls, file_format: FileFormat, adapter_path: str) -> None:
+        """Register adapter as a string path to defer import."""
+        cls._adapters[file_format] = adapter_path
+
+    @classmethod
+    def get_adapter(cls, file_type: FileFormat) -> RKNSBaseAdapter:
+        """Dynamically load the adapter class only when needed."""
+        adapter_path = cls._adapters.get(file_type)
+        if not adapter_path:
+            raise ValueError(f"No adapter found for file type: {file_type}")
+
+        return import_from_string(adapter_path)

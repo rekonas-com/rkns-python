@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import zarr
 import zarr.storage
 
-from rkns.rkns_util import ZarrMode, import_from_string
+from rkns.util import ZarrMode, import_from_string
 from rkns.version import __version__
 
 if TYPE_CHECKING:
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from zarr.storage import StoreLike
 
-    from rkns.rkns_adapter import RKNSBaseAdapter
+    from rkns.adapters.base import RKNSBaseAdapter
 
 
 class RKNS:
