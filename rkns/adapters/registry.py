@@ -3,13 +3,8 @@ from typing import TYPE_CHECKING
 from ..util import import_from_string
 
 if TYPE_CHECKING:
-    from pathlib import Path
-    from typing import Callable
-
     from ..file_formats import FileFormat
     from .base import RKNSBaseAdapter
-
-    FileFormatDetector = Callable[[Path], str | None]
 
 
 class AdapterRegistry:
@@ -29,10 +24,10 @@ class AdapterRegistry:
         cls._adapters[file_format] = adapter_path
 
     @classmethod
-    def get_adapter(cls, file_type: FileFormat) -> RKNSBaseAdapter:
+    def get_adapter(cls, file_format: FileFormat) -> RKNSBaseAdapter:
         """Dynamically load the adapter class only when needed."""
-        adapter_path = cls._adapters.get(file_type)
+        adapter_path = cls._adapters.get(file_format)
         if not adapter_path:
-            raise ValueError(f"No adapter found for file type: {file_type}")
+            raise ValueError(f"No adapter found for file type: {file_format}")
 
         return import_from_string(adapter_path)

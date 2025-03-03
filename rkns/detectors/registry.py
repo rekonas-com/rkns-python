@@ -8,9 +8,14 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Callable
 
+    from zarr.storage import StoreLike
+
     from ..file_formats import FileFormat
 
-    FileFormatDetector = Callable[[Path], FileFormat]
+    FileFormatDetector = Callable[[StoreLike], FileFormat]
+
+
+__all__ = ["FileFormatRegistry"]
 
 
 class FileFormatRegistry:
@@ -69,7 +74,7 @@ class FileFormatRegistry:
         return import_from_string(detector_path)
 
     @classmethod
-    def detect_fileformat(cls, file_path: Path) -> FileFormat:
+    def detect_fileformat(cls, file_path: StoreLike) -> FileFormat:
         """
         Detect the file format by iterating through all registered
         detector function until a match is found.
@@ -81,14 +86,10 @@ class FileFormatRegistry:
 
         Returns
         -------
-            A string identifying the detected format, e.g. "EDF".
-
-        Raises
-        ------
-        NotImplementedError
-            If none of the registered detectors match,
-            the file format is not supported yet.
+            An Enum identifying the detected format, e.g. "EDF".
+            Returns FileFormat.UNKNOWN if the format could not be detected.
         """
+        detected_format = FileFormat.UNKNOWN
         for format_name, detector_fn_dotted_path in cls._detector_fn_path.items():
             detector_fn: FileFormatDetector = import_from_string(
                 detector_fn_dotted_path
@@ -96,4 +97,5 @@ class FileFormatRegistry:
             detected_format = detector_fn(file_path)
             if detected_format != FileFormat.UNKNOWN:
                 return detected_format
-        raise NotImplementedError(f"Unknown file format for: {file_path}")
+
+        return detected_format

@@ -1,0 +1,14 @@
+{
+    "[python]": {
+      "editor.formatOnSave": true,
+      "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "python.analysis.typeCheckingMode": "standard",
+    "python.languageServer": "Pylance",
+    "python.analysis.supportDocstringTemplate": false,
+    "autoDocstring.docstringFormat": "numpy-notypes",
+    "autoDocstring.startOnNewLine": true
+}

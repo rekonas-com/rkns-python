@@ -1,7 +1,8 @@
+from os import PathLike
 from pathlib import Path
 
 
-def detect_format(path: Path) -> str | None:
+def detect_format(path: PathLike) -> str | None:
     """
     If the suffix in lowercase is ".edf", this function detects edf and edf+
     based on the first byte of the file.
@@ -17,6 +18,8 @@ def detect_format(path: Path) -> str | None:
     -------
         "EDF", "EDF_PLUS", or None if not detected.
     """
+
+    path = Path(path)
     if path.suffix.lower() != ".edf":
         return None
 
