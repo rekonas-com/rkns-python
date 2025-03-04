@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from asyncio import run
 from typing import cast
 
 import zarr
 import zarr.errors
+
+from rkns.util import RKNSNodeNames
 
 from ..util import RKNSNodeNames as Names
 from ..util import check_rkns_validity
@@ -21,36 +24,34 @@ class RKNSBaseAdapter(ABC):
     Not technically an adapter in an object oriented sense, and more like a Data Converter.
     """
 
+    @classmethod
     @abstractmethod
     def populate_rkns_from_raw(
-        self,
+        cls,
         raw_node: zarr.Group,
         root_node: zarr.Group,
         overwrite_if_exists: bool = False,
         validate: bool = True,
     ) -> zarr.Group:
-        """
-        Takes as input the zarr raw Group and creates a new child group "rkns" to the provided root_node.
-        The created node follows the structure of the "/rkns" subgroup according to the RKNS specifications.
+        pass
 
-        Parameters
-        ----------
-        raw_node
-            Group node corresponding to "/_raw" in the RKNS specs.
-        root_node
-            Group node corresponding to "/" in the RKNS specs.
-        validate
-            Whether to do some validation of the provided raw data,
-            by default True.
-            Group node corresponding to "/" in the RKNS specs.
-        overwrite_if_exists
-            If set to True, use write mode "w" for overwriting an existing /rkns child group if it exists.
-            If set to False, use write mode "w-", which fails if the child group /rkns exists.
-
-        Returns
-        -------
-            The created node that was added as a child to the root_node.
-        """
+    @classmethod
+    def create_rkns_group(
+        cls, root_node: zarr.Group, overwrite_if_exists: bool
+    ) -> zarr.Group:
+        _rkns_name = RKNSNodeNames.rkns_root.value
+        try:
+            _rkns = root_node.create_group(_rkns_name)
+        except zarr.errors.ContainsGroupError as e:
+            if overwrite_if_exists:
+                run(root_node.store.delete_dir(_rkns_name))
+                _rkns = root_node.create_group(_rkns_name)
+            else:
+                raise RuntimeError(
+                    "The group node /rkns already exists."
+                    + "\n For overwriting it, set 'overwrite_if_exists=True'"
+                ) from e
+        return _rkns
 
 
 class RKNSIdentityAdapter(RKNSBaseAdapter):
@@ -60,8 +61,9 @@ class RKNSIdentityAdapter(RKNSBaseAdapter):
 
     """
 
+    @classmethod
     def populate_rkns_from_raw(
-        self,
+        cls,
         raw_node: zarr.Group,
         root_node: zarr.Group,
         overwrite_if_exists: bool = False,

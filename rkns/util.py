@@ -99,6 +99,8 @@ class RKNSNodeNames(str, Enum):
     view = "view"
     history = "history"
     raw_signal = "signal"
+    rkns_signal = "signal"
+    rkns_signal_minmaxs = "signal_minmaxs"
 
 
 def check_rkns_validity(rkns_node: zarr.Group | zarr.Array) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from asyncio import run
 from hashlib import md5
 from pathlib import Path
 from time import time
@@ -8,6 +9,7 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import zarr
 import zarr.codecs as codecs
+import zarr.errors
 import zarr.storage
 
 from rkns.adapters.registry import AdapterRegistry
@@ -28,13 +30,16 @@ RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
 
 class RKNS:
     """The RKNS class represents a single ExG record of a subject.
-    Data is optionally persisted to a Zarr store."""
+    Data is always a Zarr store."""
 
-    def __init__(self, store: zarr.storage.StoreLike, adapter: RKNSBaseAdapter) -> None:
+    def __init__(self, store: zarr.storage.StoreLike) -> None:
         self.store = store
         self._root = None
         self._raw = None
-        self.adapter = adapter
+
+        self.adapter = AdapterRegistry.get_adapter(
+            file_format=self.get_fileformat_raw_signal()
+        )
 
     def _get_root(self) -> zarr.Group:
         if self._root is None:
@@ -53,6 +58,10 @@ class RKNS:
     def _get_raw_signal(self) -> zarr.Array:
         _raw_signal = self._get_raw()[RKNSNodeNames.raw_signal.value]
         return cast(zarr.Array, _raw_signal)
+
+    def get_fileformat_raw_signal(self) -> FileFormat:
+        fileformat_id = self._get_raw_signal().attrs["format"]
+        return FileFormat(fileformat_id)
 
     @classmethod
     def from_file(
@@ -148,7 +157,6 @@ class RKNS:
         """
         if target_store is None:
             target_store = zarr.storage.MemoryStore()
-        adapter = AdapterRegistry.get_adapter(file_format=file_format)
 
         file_path = Path(file_path)
         root_node = cls.__init_root(target_store)
@@ -175,7 +183,7 @@ class RKNS:
         _raw_signal.attrs["modification_time"] = stat.st_mtime
         _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
-        rkns = cls(store=target_store, adapter=adapter)
+        rkns = cls(store=target_store)
         return rkns
 
     def _reconstruct_original_file(self, file_path: str | Path) -> None:
@@ -184,11 +192,31 @@ class RKNS:
         with open(file_path, "wb") as file:
             file.write(signal_array[:].tobytes())  # type: ignore
 
-    def populate_rkns_from_raw(self, overwrite_existing: bool = False) -> Self:
+    def populate_rkns_from_raw(
+        self, overwrite_if_exists: bool = False, validate: bool = True
+    ) -> Self:
+        # root = self._get_root()
+
+        # _rkns_name = RKNSNodeNames.rkns_root.value
+        # try:
+        #     _rkns = root.create_group(_rkns_name)
+        # except zarr.errors.ContainsGroupError as e:
+        #     if overwrite_existing:
+        #         run(root.store.delete_dir(_rkns_name))
+        #         _rkns = root.create_group(_rkns_name)
+        #     else:
+        #         raise
+
+        self.adapter.populate_rkns_from_raw(
+            raw_node=self._get_raw(),
+            root_node=self._get_root(),
+            overwrite_if_exists=overwrite_if_exists,
+            validate=validate,
+        )
         raise NotImplementedError()
 
     def reset_rkns(self) -> Self:
-        return self.populate_rkns_from_raw(overwrite_existing=True)
+        return self.populate_rkns_from_raw(overwrite_if_exists=True)
 
     @classmethod
     def __init_root(cls, store: StoreLike | None) -> zarr.Group:

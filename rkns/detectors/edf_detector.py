@@ -44,5 +44,4 @@ def detect_format(path: StoreLike) -> FileFormat:
     fileformat = {"0": FileFormat.EDF, "1": FileFormat.EDF_PLUS}.get(
         edf_version, FileFormat.UNKNOWN
     )
-
     return fileformat
