@@ -27,18 +27,30 @@ class RKNS:
     """The RKNS class represents a single ExG record of a subject.
     Data is optionally persisted to a Zarr store."""
 
-    def __init__(self, root: zarr.Group, adapter: RKNSBaseAdapter) -> None:
-        self.root = root
+    def __init__(self, store: zarr.storage.StoreLike, adapter: RKNSBaseAdapter) -> None:
+        self.store = store
+        self._root = None
         self.adapter = adapter
 
-        # if self.adapter:
-        #     self.adapter.from_src()
+    def _get_root(self) -> zarr.Group:
+        if self._root is None:
+            self._root = cast(zarr.Group, zarr.open(self.store, mode="r+"))
+        return self._root
+
+    def _get_raw(self) -> zarr.Group:
+        _raw_root = self._get_root()[RKNSNodeNames.raw_root.value]
+        return cast(zarr.Group, _raw_root)
+
+    def _get_raw_signal(self) -> zarr.Array:
+        _raw_signal = self._get_raw()[RKNSNodeNames.raw_signal.value]
+        return cast(zarr.Array, _raw_signal)
 
     @classmethod
     def from_file(
         cls,
         file_path: StoreLike,
         populate_from_raw: bool = True,
+        target_store: StoreLike | None = None,
     ) -> Self:
         """
         Create an instance of RKNS based on a given file path.
@@ -79,9 +91,7 @@ class RKNS:
                     f"For external formats  must be str | Path, but is {file_path=}"
                 )
             rkns = cls._from_external_format(
-                file_path,
-                file_format=file_format,
-                target_store=zarr.storage.MemoryStore(),
+                file_path, file_format=file_format, target_store=target_store
             )
             if populate_from_raw:
                 rkns.populate_rkns_from_raw()
@@ -103,7 +113,7 @@ class RKNS:
         cls,
         file_path: str | Path,
         file_format: FileFormat,
-        target_store: StoreLike = zarr.storage.MemoryStore(),
+        target_store: StoreLike | None,
     ) -> Self:
         """
         Create /_raw group, fills it with binary data given in file_path,
@@ -119,11 +129,16 @@ class RKNS:
             _description_
         file_format
             _description_
+            _description_
+        target_store
+            By default None. If None, a new Memory Store will be instantiated.
 
         Returns
         -------
             _description_
         """
+        if target_store is None:
+            target_store = zarr.storage.MemoryStore()
         adapter = AdapterRegistry.get_adapter(file_format=file_format)
 
         file_path = Path(file_path)
@@ -146,12 +161,11 @@ class RKNS:
         _raw_signal.attrs["modification_time"] = stat.st_mtime
         _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
-        rkns = cls(root=root_node, adapter=adapter)
+        rkns = cls(store=target_store, adapter=adapter)
         return rkns
 
     def _reconstruct_original_file(self, file_path: str | Path) -> None:
-        _raw = cast(zarr.Group, self.root[RKNSNodeNames.raw_root.value])
-        signal_array = cast(zarr.Array, _raw[RKNSNodeNames.raw_signal.value])
+        signal_array = self._get_raw_signal()
         # Write the array to the file in binary mode
         with open(file_path, "wb") as file:
             file.write(signal_array[:].tobytes())  # type: ignore

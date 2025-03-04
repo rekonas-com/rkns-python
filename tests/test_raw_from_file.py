@@ -21,7 +21,7 @@ def get_file_md5(path: str | Path) -> str:
 def test_raw_md5(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=False)
 
-    md5 = rkns_obj.root["_raw"]["signal"].attrs["md5"]  # type: ignore
+    md5 = rkns_obj._get_raw_signal().attrs["md5"]  # type: ignore
     ref_md5 = get_file_md5(path)
     assert md5 == ref_md5
 
