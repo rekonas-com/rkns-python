@@ -33,16 +33,22 @@ class RKNS:
     def __init__(self, store: zarr.storage.StoreLike, adapter: RKNSBaseAdapter) -> None:
         self.store = store
         self._root = None
+        self._raw = None
         self.adapter = adapter
 
     def _get_root(self) -> zarr.Group:
         if self._root is None:
-            self._root = cast(zarr.Group, zarr.open(self.store, mode="r+"))
+            self._root = zarr.open_group(self.store, mode="r+")
         return self._root
 
     def _get_raw(self) -> zarr.Group:
-        _raw_root = self._get_root()[RKNSNodeNames.raw_root.value]
-        return cast(zarr.Group, _raw_root)
+        if self._raw is None:
+            # NOTE: Read only does not seem to work for individual groups
+            # This would have to be done for the whole store.
+            self._raw = zarr.open_group(
+                self.store, path=RKNSNodeNames.raw_root.value, mode="r"
+            )
+        return self._raw
 
     def _get_raw_signal(self) -> zarr.Array:
         _raw_signal = self._get_raw()[RKNSNodeNames.raw_signal.value]
