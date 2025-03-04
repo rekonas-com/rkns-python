@@ -29,6 +29,8 @@ def test_raw_md5(path):
         rkns_obj._reconstruct_original_file(temp_file.name)
         reconstructed_md5 = get_file_md5(temp_file.name)
     assert md5 == ref_md5 == reconstructed_md5
+    tmp = rkns_obj._get_raw_signal()
+    breakpoint()
 
 
 if __name__ == "main":

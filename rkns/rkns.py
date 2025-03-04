@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import zarr
+import zarr.codecs as codecs
 import zarr.storage
 
 from rkns.adapters.registry import AdapterRegistry
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
     from zarr.storage import StoreLike
 
     from rkns.adapters.base import RKNSBaseAdapter
+
+RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
 
 
 class RKNS:
@@ -149,10 +152,15 @@ class RKNS:
         # TODO this simply loads the whole chunk into memory.
         # this should be doable in a more elegant manner using (variable) chunks
         byte_array = np.fromfile(file_path, dtype=np.uint8)
+
+        # TODO: Decide on codec here.
+        compressors = codecs.ZstdCodec(level=3)
         _raw_signal = _raw_node.create_array(
             name=RKNSNodeNames.raw_signal.value,
             shape=byte_array.shape,
             dtype=byte_array.dtype,
+            chunks=RAW_CHUNK_SIZE_BYTES,
+            compressors=compressors,
         )
         _raw_signal[:] = byte_array
         _raw_signal.attrs["filename"] = file_path.name
