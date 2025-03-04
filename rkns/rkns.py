@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from os import PathLike, name
+from hashlib import md5
 from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING, cast
@@ -73,16 +73,20 @@ class RKNS:
         if file_format == FileFormat.RKNS:
             rkns = cls._from_existing_rkns_store(file_path)
         else:
-            if not isinstance(file_path, PathLike):
+            if not isinstance(file_path, str):
                 # should not be reachable, as Stores will automatically be detected as RKNS.
                 raise TypeError(
-                    f"For external formats  must be PathLike, but is {file_path=}"
+                    f"For external formats  must be str | Path, but is {file_path=}"
                 )
-            rkns = cls._from_external_format(file_path, file_format=file_format)
+            rkns = cls._from_external_format(
+                file_path,
+                file_format=file_format,
+                target_store=zarr.storage.MemoryStore(),
+            )
             if populate_from_raw:
                 rkns.populate_rkns_from_raw()
 
-        raise NotImplementedError()
+        return rkns
 
     @classmethod
     def _from_existing_rkns_store(
@@ -96,7 +100,10 @@ class RKNS:
 
     @classmethod
     def _from_external_format(
-        cls, file_path: PathLike, file_format: FileFormat
+        cls,
+        file_path: str | Path,
+        file_format: FileFormat,
+        target_store: StoreLike = zarr.storage.MemoryStore(),
     ) -> Self:
         """
         Create /_raw group, fills it with binary data given in file_path,
@@ -120,15 +127,15 @@ class RKNS:
         adapter = AdapterRegistry.get_adapter(file_format=file_format)
 
         file_path = Path(file_path)
-        root_node = cls.__init_root(file_path)
+        root_node = cls.__init_root(target_store)
 
         # fill raw node
-        _raw_node = root_node.create_group(name=RKNSNodeNames.raw_root)
+        _raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
         # TODO this simply loads the whole chunk into memory.
         # this should be doable in a more elegant manner using (variable) chunks
         byte_array = np.fromfile(file_path, dtype=np.uint8)
         _raw_signal = _raw_node.create_array(
-            name=RKNSNodeNames.raw_signal,
+            name=RKNSNodeNames.raw_signal.value,
             shape=byte_array.shape,
             dtype=byte_array.dtype,
         )
@@ -137,13 +144,14 @@ class RKNS:
         _raw_signal.attrs["format"] = file_format.value
         stat = file_path.stat()
         _raw_signal.attrs["modification_time"] = stat.st_mtime
+        _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
         rkns = cls(root=root_node, adapter=adapter)
         return rkns
 
-    def _reconstruct_original_file(self, file_path: PathLike) -> None:
-        _raw = cast(zarr.Group, self.root[RKNSNodeNames.raw_root])
-        signal_array = cast(zarr.Array, _raw[RKNSNodeNames.raw_signal])
+    def _reconstruct_original_file(self, file_path: str | Path) -> None:
+        _raw = cast(zarr.Group, self.root[RKNSNodeNames.raw_root.value])
+        signal_array = cast(zarr.Array, _raw[RKNSNodeNames.raw_signal.value])
         # Write the array to the file in binary mode
         with open(file_path, "wb") as file:
             file.write(signal_array[:].tobytes())  # type: ignore
