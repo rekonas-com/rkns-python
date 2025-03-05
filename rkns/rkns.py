@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from asyncio import run
 from hashlib import md5
 from pathlib import Path
 from time import time
@@ -15,15 +14,14 @@ import zarr.storage
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
 from rkns.file_formats import FileFormat
-from rkns.util import RKNSNodeNames, ZarrMode, import_from_string
+from rkns.util import RKNSNodeNames
 from rkns.version import __version__
 
 if TYPE_CHECKING:
-    from typing import Any, Self
+    from typing import Self
 
     from zarr.storage import StoreLike
 
-    from rkns.adapters.base import RKNSBaseAdapter
 
 RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
 
@@ -54,6 +52,13 @@ class RKNS:
                 self.store, path=RKNSNodeNames.raw_root.value, mode="r"
             )
         return self._raw
+
+    def _get_rkns(self) -> zarr.Group:
+        if self._rkns is None:
+            self._rkns = zarr.open_group(
+                self.store, path=RKNSNodeNames.raw_root.value, mode="r+"
+            )
+        return self._rkns
 
     def _get_raw_signal(self) -> zarr.Array:
         _raw_signal = self._get_raw()[RKNSNodeNames.raw_signal.value]
@@ -195,25 +200,13 @@ class RKNS:
     def populate_rkns_from_raw(
         self, overwrite_if_exists: bool = False, validate: bool = True
     ) -> Self:
-        # root = self._get_root()
-
-        # _rkns_name = RKNSNodeNames.rkns_root.value
-        # try:
-        #     _rkns = root.create_group(_rkns_name)
-        # except zarr.errors.ContainsGroupError as e:
-        #     if overwrite_existing:
-        #         run(root.store.delete_dir(_rkns_name))
-        #         _rkns = root.create_group(_rkns_name)
-        #     else:
-        #         raise
-
-        self.adapter.populate_rkns_from_raw(
+        self._rkns = self.adapter.populate_rkns_from_raw(
             raw_node=self._get_raw(),
             root_node=self._get_root(),
             overwrite_if_exists=overwrite_if_exists,
             validate=validate,
         )
-        raise NotImplementedError()
+        return self
 
     def reset_rkns(self) -> Self:
         return self.populate_rkns_from_raw(overwrite_if_exists=True)
@@ -243,43 +236,3 @@ class RKNS:
         It must be a JSON-serializable dict."""
 
         return {"rkns_version": __version__, "rkns_implementation": "python"}
-
-    # @classmethod
-    # def open(cls, store: StoreLike) -> Self:
-    #     """Open existing file. This will make the raw and rkns groups read-only."""
-    #     # Open root group read-only
-    #     root = zarr.open_group(store=store, mode=ZarrMode.READ_ONLY.value)
-    #     adapter_type_str = str(root[RKNSNodeNames.raw_root].attrs["adapter_type"])
-    #     adapter = None
-    #     if adapter_type_str:
-    #         # Dynamically import the adapter class
-    #         adapter = import_from_string(adapter_type_str)(
-    #             raw_group=root[RKNSNodeNames.raw_root]
-    #         )
-
-    #     return cls(root, adapter)
-
-    # @classmethod
-    # def create(
-    #     cls,
-    #     adapter_type_str: str,
-    #     store: StoreLike = zarr.storage.MemoryStore(),
-    #     **kwargs: dict[str, Any],
-    # ) -> Self:
-    #     """Create a new RKNS file with an optional adapter."""
-    #     root = cls.__init_root(store)
-    #     # Create adapter
-    #     if adapter_type_str:
-    #         # Extract adapter-specific arguments
-    #         adapter_args = {
-    #             kw.removeprefix("adapter_"): kwargs[kw]
-    #             for kw in kwargs
-    #             if kw.startswith("adapter_")
-    #         }
-    #         adapter = import_from_string(adapter_type_str)(
-    #             raw_group=root["raw"], **adapter_args
-    #         )
-    #     else:
-    #         adapter = None
-
-    #     return cls(root, adapter)

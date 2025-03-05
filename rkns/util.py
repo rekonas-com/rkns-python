@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 import sys
 from enum import Enum
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import zarr
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
+    from zarr.abc.codec import BaseCodec
 
 
 def cached_import(module_path: str, class_name: str) -> Any:
@@ -107,3 +113,22 @@ def check_rkns_validity(rkns_node: zarr.Group | zarr.Array) -> None:
     # TODO: Proper check of file structure of the /rkns node.
     if not isinstance(rkns_node, zarr.Group):
         raise ValueError(f"The child node {RKNSNodeNames.rkns_root=} is not a group. ")
+
+
+def add_child_array(
+    parent_node: zarr.Group,
+    data: ArrayLike,
+    name: str,
+    attributes: dict[str, Any] | None = None,
+    compressors: BaseCodec | None = None,
+):
+    zarr_array = parent_node.create_array(
+        name=name,
+        shape=data.shape,  # type: ignore
+        dtype=data.dtype,  # type: ignore
+        compressors=compressors,
+    )
+    zarr_array[:] = data
+
+    if attributes is not None:
+        zarr_array.attrs.update(attributes)
