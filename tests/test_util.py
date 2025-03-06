@@ -8,6 +8,7 @@ from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
 from zarr.storage import LocalStore, MemoryStore
 
 from rkns.util import (
+    add_child_array,
     copy_attributes,
     copy_group_recursive,
     get_target_store,
@@ -223,3 +224,97 @@ def test_get_target_store_with_valid_store():
 def test_get_target_store_with_invalid_input():
     with pytest.raises(TypeError):
         get_target_store(123)  # type: ignore
+
+
+@pytest.fixture
+def parent_node(tmp_path):
+    store = LocalStore(tmp_path)
+    return zarr.group(store=store)
+
+
+@pytest.fixture
+def data():
+    return np.random.rand(10, 10)
+
+
+@pytest.fixture
+def name():
+    return "test_array"
+
+
+@pytest.fixture
+def attributes():
+    return {"key1": "value1", "key2": "value2"}
+
+
+def test_add_child_array(parent_node, data, name, attributes):
+    # Call the function
+    add_child_array(parent_node, data, name, attributes)
+
+    # Check if the array is created
+    assert name in parent_node.array_keys()
+
+    # Retrieve the array
+    zarr_array = parent_node[name]
+
+    # Check the shape and dtype
+    assert zarr_array.shape == data.shape
+    assert zarr_array.dtype == data.dtype
+
+    # Check the data
+    np.testing.assert_array_equal(zarr_array[:], data)
+
+    # Check the attributes
+    for key, value in attributes.items():
+        assert zarr_array.attrs[key] == value
+
+
+def test_add_child_array_no_attributes(parent_node, data, name):
+    # Call the function without attributes
+    add_child_array(parent_node, data, name)
+
+    # Check if the array is created
+    assert name in parent_node.array_keys()
+
+    # Retrieve the array
+    zarr_array = parent_node[name]
+
+    # Check the shape and dtype
+    assert zarr_array.shape == data.shape
+    assert zarr_array.dtype == data.dtype
+
+    # Check the data
+    np.testing.assert_array_equal(zarr_array[:], data)
+
+    # Check that no attributes are set
+    assert len(zarr_array.attrs) == 0
+
+
+def test_add_child_array_with_compressors(parent_node, data, name, attributes):
+    # Define a compressor
+
+    compressor = BloscCodec(
+        cname=BloscCname.zstd,  # Use enum instead of string
+        clevel=3,  # This is fine as int
+        shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
+        typesize=None,  # This is optional but can be specified if known
+    )
+
+    # Call the function with compressors
+    add_child_array(parent_node, data, name, attributes, compressors=compressor)
+
+    assert name in parent_node.array_keys()
+
+    zarr_array = parent_node[name]
+
+    assert zarr_array.shape == data.shape
+    assert zarr_array.dtype == data.dtype
+
+    np.testing.assert_array_equal(zarr_array[:], data)
+
+    for key, value in attributes.items():
+        assert zarr_array.attrs[key] == value
+
+    assert zarr_array.compressors[0].cname.value == "zstd"
+    assert zarr_array.compressors[0].clevel == 3
+    assert zarr_array.compressors[0].shuffle == BloscShuffle.bitshuffle
