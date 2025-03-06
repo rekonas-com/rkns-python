@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import zarr
 import zarr.storage
+from zarr.abc.store import Store
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -126,28 +127,17 @@ def add_child_array(
 
 
 def get_target_store(
-    path_or_store: zarr.storage.StoreLike | Path | str,
-) -> zarr.storage.StoreLike:
-    """
-    Convert the provided path or store to a valid zarr store.
-
-    Parameters
-    ----------
-    path_or_store
-        Target path or store
-
-    Returns
-    -------
-    zarr.storage.StoreLike
-        The target zarr store
-    """
+    path_or_store: Store | Path | str,
+) -> Store:
     if isinstance(path_or_store, (str, Path)):
         path = Path(path_or_store)
         if path.exists():
             raise FileExistsError(f"Export target already exists: {path}")
         return zarr.storage.LocalStore(path)
-    else:
+    elif isinstance(path_or_store, Store):
         return path_or_store
+    else:
+        raise TypeError("Invalid {path_or_store=}.")
 
 
 def copy_attributes(

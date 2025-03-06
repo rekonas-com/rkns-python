@@ -5,9 +5,14 @@ import pytest
 import zarr
 import zarr.codecs
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
-from zarr.storage import MemoryStore
+from zarr.storage import LocalStore, MemoryStore
 
-from rkns.util import copy_attributes, copy_group_recursive, import_from_string
+from rkns.util import (
+    copy_attributes,
+    copy_group_recursive,
+    get_target_store,
+    import_from_string,
+)
 
 
 @pytest.fixture
@@ -138,10 +143,7 @@ def test_copy_group_recursive_empty_group(temp_zarr_store):
 
 def test_copy_group_recursive_array_properties(temp_zarr_store):
     """Test that array properties like chunks, compressors and fill_value are preserved."""
-    # Create source group with customized array
     source_group = temp_zarr_store.create_group("source")
-
-    # In zarr v3, compressors are specified differently
 
     compressor = BloscCodec(
         cname=BloscCname.zstd,  # Use enum instead of string
@@ -192,3 +194,32 @@ def test_import_from_string():
 
     with pytest.raises(ModuleNotFoundError):
         import_from_string("utils_tests.unexistent")
+
+
+def test_get_target_store_with_valid_path(tmp_path):
+    path = tmp_path / "test_store"
+
+    store = get_target_store(path)
+
+    assert isinstance(store, LocalStore)
+
+    assert store.root == path
+
+
+def test_get_target_store_with_existing_path(tmp_path):
+    path = tmp_path / "existing_store"
+    path.mkdir()
+
+    with pytest.raises(FileExistsError, match=f"Export target already exists: {path}"):
+        get_target_store(path)
+
+
+def test_get_target_store_with_valid_store():
+    mock_store = MemoryStore()
+    store = get_target_store(mock_store)
+    assert store is mock_store
+
+
+def test_get_target_store_with_invalid_input():
+    with pytest.raises(TypeError):
+        get_target_store(123)  # type: ignore
