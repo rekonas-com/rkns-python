@@ -63,119 +63,119 @@ def source_group(temp_zarr_store):
     return group
 
 
-def test_copy_attributes_array(temp_zarr_store, source_array):
-    """Test copying attributes from one array to another."""
-    # Create target array
-    target_array = temp_zarr_store.create_array(
-        "target_array", shape=(3, 3), dtype=np.float64
-    )
+class TestCopyAttributesArray:
+    def test_copy_attributes_array(self, temp_zarr_store, source_array):
+        """Test copying attributes from one array to another."""
+        # Create target array
+        target_array = temp_zarr_store.create_array(
+            "target_array", shape=(3, 3), dtype=np.float64
+        )
 
-    # Copy attributes
-    copy_attributes(source_array, target_array)
+        # Copy attributes
+        copy_attributes(source_array, target_array)
 
-    # Verify attributes were copied
-    assert target_array.attrs["key1"] == "value1"
-    assert target_array.attrs["key2"] == 42
-    assert len(target_array.attrs) == 2
+        # Verify attributes were copied
+        assert target_array.attrs["key1"] == "value1"
+        assert target_array.attrs["key2"] == 42
+        assert len(target_array.attrs) == 2
 
+    def test_copy_attributes_group(self, temp_zarr_store, source_group):
+        """Test copying attributes from one group to another."""
+        # Create target group
+        target_group = temp_zarr_store.create_group("target_group")
 
-def test_copy_attributes_group(temp_zarr_store, source_group):
-    """Test copying attributes from one group to another."""
-    # Create target group
-    target_group = temp_zarr_store.create_group("target_group")
+        # Copy attributes
+        copy_attributes(source_group, target_group)
 
-    # Copy attributes
-    copy_attributes(source_group, target_group)
-
-    # Verify attributes were copied
-    assert target_group.attrs["group_attr1"] == "group_value1"
-    assert target_group.attrs["group_attr2"] == [1, 2, 3]
-    assert len(target_group.attrs) == 2
-
-
-def test_copy_group_recursive(temp_zarr_store, source_group):
-    """Test recursively copying a group and all its contents."""
-    # Create target group
-    target_group = temp_zarr_store.create_group("target_group")
-
-    # Copy group recursively
-    copy_group_recursive(source_group, target_group)
-    # Verify group attributes were copied
-    assert target_group.attrs["group_attr1"] == "group_value1"
-    assert target_group.attrs["group_attr2"] == [1, 2, 3]
-
-    # Verify arrays were copied with their data and attributes
-    assert "array1" in target_group
-    assert "array2" in target_group
-    np.testing.assert_array_equal(target_group["array1"][:], np.ones((3, 3)))
-    np.testing.assert_array_equal(target_group["array2"][:], np.zeros((2, 4)))
-    assert target_group["array1"].attrs["array1_attr"] == "array1_value"
-    assert target_group["array2"].attrs["array2_attr"] == "array2_value"
-
-    # Verify subgroup was copied recursively
-    assert "subgroup" in target_group
-    assert target_group["subgroup"].attrs["subgroup_attr"] == "subgroup_value"
-
-    # Verify subarray in subgroup
-    assert "subarray" in target_group["subgroup"]
-    np.testing.assert_array_equal(
-        target_group["subgroup"]["subarray"][:], np.ones((2, 2))
-    )
-    assert (
-        target_group["subgroup"]["subarray"].attrs["subarray_attr"] == "subarray_value"
-    )
+        # Verify attributes were copied
+        assert target_group.attrs["group_attr1"] == "group_value1"
+        assert target_group.attrs["group_attr2"] == [1, 2, 3]
+        assert len(target_group.attrs) == 2
 
 
-def test_copy_group_recursive_empty_group(temp_zarr_store):
-    """Test recursively copying a group with attributes but no children arrays."""
-    # Create empty source group
-    source_group = temp_zarr_store.create_group("empty_source")
-    source_group.attrs["empty"] = True
+class TestCopyGroupRecursive:
+    def test_copy_group_recursive(self, temp_zarr_store, source_group):
+        """Test recursively copying a group and all its contents."""
+        # Create target group
+        target_group = temp_zarr_store.create_group("target_group")
 
-    target_group = temp_zarr_store.create_group("empty_target")
+        # Copy group recursively
+        copy_group_recursive(source_group, target_group)
+        # Verify group attributes were copied
+        assert target_group.attrs["group_attr1"] == "group_value1"
+        assert target_group.attrs["group_attr2"] == [1, 2, 3]
 
-    copy_group_recursive(source_group, target_group)
+        # Verify arrays were copied with their data and attributes
+        assert "array1" in target_group
+        assert "array2" in target_group
+        np.testing.assert_array_equal(target_group["array1"][:], np.ones((3, 3)))
+        np.testing.assert_array_equal(target_group["array2"][:], np.zeros((2, 4)))
+        assert target_group["array1"].attrs["array1_attr"] == "array1_value"
+        assert target_group["array2"].attrs["array2_attr"] == "array2_value"
 
-    # Verify attributes were copied but no arrays or groups
-    assert target_group.attrs["empty"] is True
-    assert len(list(target_group.arrays())) == 0
-    assert len(list(target_group.groups())) == 0
+        # Verify subgroup was copied recursively
+        assert "subgroup" in target_group
+        assert target_group["subgroup"].attrs["subgroup_attr"] == "subgroup_value"
 
+        # Verify subarray in subgroup
+        assert "subarray" in target_group["subgroup"]
+        np.testing.assert_array_equal(
+            target_group["subgroup"]["subarray"][:], np.ones((2, 2))
+        )
+        assert (
+            target_group["subgroup"]["subarray"].attrs["subarray_attr"]
+            == "subarray_value"
+        )
 
-def test_copy_group_recursive_array_properties(temp_zarr_store):
-    """Test that array properties like chunks, compressors and fill_value are preserved."""
-    source_group = temp_zarr_store.create_group("source")
+    def test_copy_group_recursive_empty_group(self, temp_zarr_store):
+        """Test recursively copying a group with attributes but no children arrays."""
+        # Create empty source group
+        source_group = temp_zarr_store.create_group("empty_source")
+        source_group.attrs["empty"] = True
 
-    compressor = BloscCodec(
-        cname=BloscCname.zstd,  # Use enum instead of string
-        clevel=3,  # This is fine as int
-        shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
-        typesize=None,  # This is optional but can be specified if known
-    )
-    array = source_group.create_array(
-        name="custom_array",
-        shape=(10, 10),
-        dtype=np.float64,
-        chunks=(5, 5),
-        compressors=compressor,  # In v3, it's compressors (plural)
-        fill_value=999.0,
-    )
-    array[:] = np.ones((10, 10))
+        target_group = temp_zarr_store.create_group("empty_target")
 
-    target_group = temp_zarr_store.create_group("target")
+        copy_group_recursive(source_group, target_group)
 
-    copy_group_recursive(source_group, target_group)
+        # Verify attributes were copied but no arrays or groups
+        assert target_group.attrs["empty"] is True
+        assert len(list(target_group.arrays())) == 0
+        assert len(list(target_group.groups())) == 0
 
-    # Verify array properties were preserved
-    target_array = target_group["custom_array"]
-    assert target_array.chunks == (5, 5)
-    assert target_array.fill_value == 999.0
+    def test_copy_group_recursive_array_properties(self, temp_zarr_store):
+        """Test that array properties like chunks, compressors and fill_value are preserved."""
+        source_group = temp_zarr_store.create_group("source")
 
-    # Check compressor
-    assert isinstance(target_array.compressors[0], zarr.codecs.BloscCodec)
-    assert target_array.compressors[0].cname.value == "zstd"
-    assert target_array.compressors[0].clevel == 3
-    assert target_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+        compressor = BloscCodec(
+            cname=BloscCname.zstd,  # Use enum instead of string
+            clevel=3,  # This is fine as int
+            shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
+            typesize=None,  # This is optional but can be specified if known
+        )
+        array = source_group.create_array(
+            name="custom_array",
+            shape=(10, 10),
+            dtype=np.float64,
+            chunks=(5, 5),
+            compressors=compressor,  # In v3, it's compressors (plural)
+            fill_value=999.0,
+        )
+        array[:] = np.ones((10, 10))
+
+        target_group = temp_zarr_store.create_group("target")
+
+        copy_group_recursive(source_group, target_group)
+
+        # Verify array properties were preserved
+        target_array = target_group["custom_array"]
+        assert target_array.chunks == (5, 5)
+        assert target_array.fill_value == 999.0
+
+        # Check compressor
+        assert isinstance(target_array.compressors[0], zarr.codecs.BloscCodec)
+        assert target_array.compressors[0].cname.value == "zstd"
+        assert target_array.compressors[0].clevel == 3
+        assert target_array.compressors[0].shuffle == BloscShuffle.bitshuffle
 
 
 def test_import_from_string():
@@ -197,33 +197,33 @@ def test_import_from_string():
         import_from_string("utils_tests.unexistent")
 
 
-def test_get_target_store_with_valid_path(tmp_path):
-    path = tmp_path / "test_store"
+class TestGetTargetStore:
+    def test_get_target_store_with_valid_path(self, tmp_path):
+        path = tmp_path / "test_store"
 
-    store = get_target_store(path)
+        store = get_target_store(path)
 
-    assert isinstance(store, LocalStore)
+        assert isinstance(store, LocalStore)
 
-    assert store.root == path
+        assert store.root == path
 
+    def test_get_target_store_with_existing_path(self, tmp_path):
+        path = tmp_path / "existing_store"
+        path.mkdir()
 
-def test_get_target_store_with_existing_path(tmp_path):
-    path = tmp_path / "existing_store"
-    path.mkdir()
+        with pytest.raises(
+            FileExistsError, match=f"Export target already exists: {path}"
+        ):
+            get_target_store(path)
 
-    with pytest.raises(FileExistsError, match=f"Export target already exists: {path}"):
-        get_target_store(path)
+    def test_get_target_store_with_valid_store(self):
+        mock_store = MemoryStore()
+        store = get_target_store(mock_store)
+        assert store is mock_store
 
-
-def test_get_target_store_with_valid_store():
-    mock_store = MemoryStore()
-    store = get_target_store(mock_store)
-    assert store is mock_store
-
-
-def test_get_target_store_with_invalid_input():
-    with pytest.raises(TypeError):
-        get_target_store(123)  # type: ignore
+    def test_get_target_store_with_invalid_input(self):
+        with pytest.raises(TypeError):
+            get_target_store(123)  # type: ignore
 
 
 @pytest.fixture
@@ -247,74 +247,75 @@ def attributes():
     return {"key1": "value1", "key2": "value2"}
 
 
-def test_add_child_array(parent_node, data, name, attributes):
-    # Call the function
-    add_child_array(parent_node, data, name, attributes)
+class TestAddChildArray:
+    def test_add_child_array(self, parent_node, data, name, attributes):
+        # Call the function
+        add_child_array(parent_node, data, name, attributes)
 
-    # Check if the array is created
-    assert name in parent_node.array_keys()
+        # Check if the array is created
+        assert name in parent_node.array_keys()
 
-    # Retrieve the array
-    zarr_array = parent_node[name]
+        # Retrieve the array
+        zarr_array = parent_node[name]
 
-    # Check the shape and dtype
-    assert zarr_array.shape == data.shape
-    assert zarr_array.dtype == data.dtype
+        # Check the shape and dtype
+        assert zarr_array.shape == data.shape
+        assert zarr_array.dtype == data.dtype
 
-    # Check the data
-    np.testing.assert_array_equal(zarr_array[:], data)
+        # Check the data
+        np.testing.assert_array_equal(zarr_array[:], data)
 
-    # Check the attributes
-    for key, value in attributes.items():
-        assert zarr_array.attrs[key] == value
+        # Check the attributes
+        for key, value in attributes.items():
+            assert zarr_array.attrs[key] == value
 
+    def test_add_child_array_no_attributes(self, parent_node, data, name):
+        # Call the function without attributes
+        add_child_array(parent_node, data, name)
 
-def test_add_child_array_no_attributes(parent_node, data, name):
-    # Call the function without attributes
-    add_child_array(parent_node, data, name)
+        # Check if the array is created
+        assert name in parent_node.array_keys()
 
-    # Check if the array is created
-    assert name in parent_node.array_keys()
+        # Retrieve the array
+        zarr_array = parent_node[name]
 
-    # Retrieve the array
-    zarr_array = parent_node[name]
+        # Check the shape and dtype
+        assert zarr_array.shape == data.shape
+        assert zarr_array.dtype == data.dtype
 
-    # Check the shape and dtype
-    assert zarr_array.shape == data.shape
-    assert zarr_array.dtype == data.dtype
+        # Check the data
+        np.testing.assert_array_equal(zarr_array[:], data)
 
-    # Check the data
-    np.testing.assert_array_equal(zarr_array[:], data)
+        # Check that no attributes are set
+        assert len(zarr_array.attrs) == 0
 
-    # Check that no attributes are set
-    assert len(zarr_array.attrs) == 0
+    def test_add_child_array_with_compressors(
+        self, parent_node, data, name, attributes
+    ):
+        # Define a compressor
 
+        compressor = BloscCodec(
+            cname=BloscCname.zstd,  # Use enum instead of string
+            clevel=3,  # This is fine as int
+            shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
+            typesize=None,  # This is optional but can be specified if known
+        )
 
-def test_add_child_array_with_compressors(parent_node, data, name, attributes):
-    # Define a compressor
+        # Call the function with compressors
+        add_child_array(parent_node, data, name, attributes, compressors=compressor)
 
-    compressor = BloscCodec(
-        cname=BloscCname.zstd,  # Use enum instead of string
-        clevel=3,  # This is fine as int
-        shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
-        typesize=None,  # This is optional but can be specified if known
-    )
+        assert name in parent_node.array_keys()
 
-    # Call the function with compressors
-    add_child_array(parent_node, data, name, attributes, compressors=compressor)
+        zarr_array = parent_node[name]
 
-    assert name in parent_node.array_keys()
+        assert zarr_array.shape == data.shape
+        assert zarr_array.dtype == data.dtype
 
-    zarr_array = parent_node[name]
+        np.testing.assert_array_equal(zarr_array[:], data)
 
-    assert zarr_array.shape == data.shape
-    assert zarr_array.dtype == data.dtype
+        for key, value in attributes.items():
+            assert zarr_array.attrs[key] == value
 
-    np.testing.assert_array_equal(zarr_array[:], data)
-
-    for key, value in attributes.items():
-        assert zarr_array.attrs[key] == value
-
-    assert zarr_array.compressors[0].cname.value == "zstd"
-    assert zarr_array.compressors[0].clevel == 3
-    assert zarr_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+        assert zarr_array.compressors[0].cname.value == "zstd"
+        assert zarr_array.compressors[0].clevel == 3
+        assert zarr_array.compressors[0].shuffle == BloscShuffle.bitshuffle
