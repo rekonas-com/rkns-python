@@ -3,9 +3,11 @@ from __future__ import annotations
 import sys
 from enum import Enum
 from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import zarr
+import zarr.storage
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -132,3 +134,81 @@ def add_child_array(
 
     if attributes is not None:
         zarr_array.attrs.update(attributes)
+
+
+def get_target_store(
+    path_or_store: zarr.storage.StoreLike | Path | str,
+) -> zarr.storage.StoreLike:
+    """
+    Convert the provided path or store to a valid zarr store.
+
+    Parameters
+    ----------
+    path_or_store
+        Target path or store
+
+    Returns
+    -------
+    zarr.storage.StoreLike
+        The target zarr store
+    """
+    if isinstance(path_or_store, (str, Path)):
+        path = Path(path_or_store)
+        if path.exists():
+            raise FileExistsError(f"Export target already exists: {path}")
+        return zarr.storage.LocalStore(path)
+    else:
+        # Assume it's already a zarr store
+        return path_or_store
+
+
+def copy_attributes(
+    source: zarr.Group | zarr.Array, target: zarr.Group | zarr.Array
+) -> None:
+    """
+    Copy all attributes from source to target.
+
+    Parameters
+    ----------
+    source
+        Source group or array
+    target
+        Target group or array
+    """
+    for key, value in source.attrs.items():
+        target.attrs[key] = value
+
+
+def copy_group_recursive(source_group: zarr.Group, target_group: zarr.Group) -> None:
+    """
+    Recursively copy a group and all its contents to the target.
+
+    Parameters
+    ----------
+    source_group
+        Source group to copy from
+    target_group
+        Target group to copy to
+    """
+    copy_attributes(source_group, target_group)
+
+    for name, array in source_group.arrays():
+        target_array = target_group.create_array(
+            name=name,
+            shape=array.shape,
+            dtype=array.dtype,
+            chunks=array.chunks,
+            compressors=array.compressors,
+            fill_value=array.fill_value,
+        )
+
+        target_array[:] = array[:]
+        copy_attributes(array, target_array)
+
+    # Recursively copy all subgroups
+    for name, subgroup in source_group.groups():
+        # Create the target subgroup
+        target_subgroup = target_group.create_group(name)
+        # Copy the subgroup attributes
+        # Recursively copy the subgroup contents
+        copy_group_recursive(subgroup, target_subgroup)
