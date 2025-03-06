@@ -4,7 +4,7 @@ import sys
 from enum import Enum
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import zarr
 import zarr.storage
@@ -187,3 +187,40 @@ def copy_group_recursive(source_group: zarr.Group, target_group: zarr.Group) -> 
     for name, subgroup in source_group.groups():
         target_subgroup = target_group.create_group(name)
         copy_group_recursive(subgroup, target_subgroup)
+
+
+class RKNSParseError(Exception):
+    pass
+
+
+def check_open(method: Callable):
+    """
+    Decorator to check if the RKNS object is closed before executing a method
+
+    Parameters
+    ----------
+    method
+        _description_
+    """
+
+    def wrapper(self, *args, **kwargs):
+        if hasattr(self, "_is_closed") and self._is_closed:
+            raise RuntimeError(
+                f"Cannot execute {method.__name__}: RKNS object has been closed"
+            )
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+def apply_check_open_to_all_methods(cls: Any):
+    """Apply the @check_open decorator to all methods of a class."""
+    for name, method in cls.__dict__.items():
+        if (
+            callable(method)
+            and not name.startswith("__")
+            and not isinstance(method, (staticmethod, classmethod))
+        ):
+            # Skip staticmethods and classmethods
+            setattr(cls, name, check_open(method))
+    return cls

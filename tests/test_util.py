@@ -9,6 +9,8 @@ from zarr.storage import LocalStore, MemoryStore
 
 from rkns.util import (
     add_child_array,
+    apply_check_open_to_all_methods,
+    check_open,
     copy_attributes,
     copy_group_recursive,
     get_target_store,
@@ -319,3 +321,82 @@ class TestAddChildArray:
         assert zarr_array.compressors[0].cname.value == "zstd"
         assert zarr_array.compressors[0].clevel == 3
         assert zarr_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+
+
+# Mock class for testing
+@apply_check_open_to_all_methods
+class MockRKNS:
+    def __init__(self):
+        self._is_closed = False
+
+    def close(self):
+        self._is_closed = True
+
+    def some_method(self):
+        return "Method executed"
+
+
+class MockRKNS2:
+    def __init__(self):
+        self._is_closed = False
+
+    def close(self):
+        self._is_closed = True
+
+    @check_open
+    def some_method(self):
+        return "Method executed"
+
+
+class TestCheckOpenDecorator:
+    def test_check_open_decorator(self):
+        mock_rkns = MockRKNS()
+        assert mock_rkns.some_method() == "Method executed"
+
+        mock_rkns.close()
+        with pytest.raises(RuntimeError) as exc_info:
+            mock_rkns.some_method()
+        assert "Cannot execute some_method: RKNS object has been closed" in str(
+            exc_info.value
+        )
+
+    def test_check_open_decorator2(self):
+        mock_rkns = MockRKNS2()
+        assert mock_rkns.some_method() == "Method executed"
+
+        mock_rkns.close()
+        with pytest.raises(RuntimeError) as exc_info:
+            mock_rkns.some_method()
+        assert "Cannot execute some_method: RKNS object has been closed" in str(
+            exc_info.value
+        )
+
+    def test_apply_check_open_to_all_methods(self):
+        mock_rkns = MockRKNS()
+        assert mock_rkns.some_method() == "Method executed"
+
+        mock_rkns.close()
+        with pytest.raises(RuntimeError) as exc_info:
+            mock_rkns.some_method()
+        assert "Cannot execute some_method: RKNS object has been closed" in str(
+            exc_info.value
+        )
+
+    def test_apply_check_open_to_all_methods_ignores_static_class_methods(self):
+        @apply_check_open_to_all_methods
+        class TestClass:
+            @staticmethod
+            def static_method():
+                return "Static method"
+
+            @classmethod
+            def class_method(cls):
+                return "Class method"
+
+            def instance_method(self):
+                return "Instance method"
+
+        test_instance = TestClass()
+        assert test_instance.static_method() == "Static method"
+        assert test_instance.class_method() == "Class method"
+        assert test_instance.instance_method() == "Instance method"
