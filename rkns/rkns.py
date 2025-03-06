@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 from hashlib import md5
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import zarr
@@ -14,13 +15,22 @@ import zarr.storage
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
 from rkns.file_formats import FileFormat
-from rkns.util import RKNSNodeNames
+from rkns.util import (
+    RKNSNodeNames,
+    copy_attributes,
+    copy_group_recursive,
+    get_target_store,
+)
 from rkns.version import __version__
+
+logger = logging.getLogger(__name__)
+
 
 if TYPE_CHECKING:
     from typing import Self
 
-    from zarr.storage import StoreLike
+    from zarr.abc.store import Store
+    from zarr.storage import StoreLike, StorePath
 
 
 RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
@@ -34,10 +44,51 @@ class RKNS:
         self.store = store
         self._root = None
         self._raw = None
+        self._is_closed = False
 
         self.adapter = AdapterRegistry.get_adapter(
             file_format=self.get_fileformat_raw_signal()
         )
+
+    @staticmethod
+    def _make_rkns_header() -> dict[str, str]:
+        """Generate header for RKNS file. This should contain information relevant for the
+        compatibility between different RKNS versions.
+        It must be a JSON-serializable dict."""
+
+        return {"rkns_version": __version__, "rkns_implementation": "python"}
+
+    def export(self, path_or_store: Store | Path | str) -> RKNS:
+        """
+        Export the RKNS object to a new store, creating a deep copy of all data.
+        NOTE: This is a temporary solution, as in the future zarr.copy_all should be available.
+
+        Parameters
+        ----------
+        path_or_store
+            Target location or store for the exported RKNS data.
+            Can be a path string, Path object, or zarr store.
+
+        Returns
+        -------
+        RKNS
+            A new RKNS instance pointing to the exported data.
+
+        Notes
+        -----
+        This creates a complete copy of the entire RKNS structure, including
+        all arrays, groups and their metadata.
+        """
+        if self._is_closed:
+            raise RuntimeError("Cannot export: RKNS object has been closed")
+
+        target_store = get_target_store(path_or_store)
+
+        target_root = zarr.group(store=target_store)
+        copy_attributes(self._get_root(), target_root)
+        copy_group_recursive(self._get_root(), target_root)
+
+        return RKNS(store=target_store)
 
     def _get_root(self) -> zarr.Group:
         if self._root is None:
@@ -74,7 +125,72 @@ class RKNS:
         file_path: StoreLike,
         populate_from_raw: bool = True,
         target_store: StoreLike | None = None,
+    ) -> "RKNS":
+        """
+        Convenience method to create an RKNS instance from a file.
+        Delegates to RKNSBuilder.from_file.
+
+        Parameters
+        ----------
+        file_path
+            _description_
+        populate_from_raw, optional
+            _description_, by default True
+        target_store, optional
+            _description_, by default None
+
+        Returns
+        -------
+            _description_
+        """
+        return RKNSBuilder.from_file(file_path, populate_from_raw, target_store)
+
+    def _reconstruct_original_file(self, file_path: str | Path) -> None:
+        signal_array = self._get_raw_signal()
+        # Write the array to the file in binary mode
+        with open(file_path, "wb") as file:
+            file.write(signal_array[:].tobytes())  # type: ignore
+
+    def populate_rkns_from_raw(
+        self, overwrite_if_exists: bool = False, validate: bool = True
     ) -> Self:
+        self._rkns = self.adapter.populate_rkns_from_raw(
+            raw_node=self._get_raw(),
+            root_node=self._get_root(),
+            overwrite_if_exists=overwrite_if_exists,
+            validate=validate,
+        )
+        return self
+
+    def reset_rkns(self) -> Self:
+        return self.populate_rkns_from_raw(overwrite_if_exists=True)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        if hasattr(self.store, "close"):
+            self.close()  # type: ignore
+
+    def close(self) -> None:
+        """Safely close the underlying store if required"""
+        if not self._is_closed:
+            try:
+                if hasattr(self.store, "close"):
+                    self._store.close()  # type: ignore
+                self._is_closed = True
+            except Exception as e:
+                logger.error(f"Error closing store: {str(e)}", exc_info=True)
+
+
+class RKNSBuilder:
+    @classmethod
+    def from_file(
+        cls,
+        file_path: StoreLike,
+        populate_from_raw: bool = True,
+        target_store: StoreLike | None = None,
+    ) -> RKNS:
         """
         Create an instance of RKNS based on a given file path.
 
@@ -106,14 +222,14 @@ class RKNS:
             )
 
         if file_format == FileFormat.RKNS:
-            rkns = cls._from_existing_rkns_store(file_path)
+            rkns = cls.from_existing_rkns_store(file_path)
         else:
             if not isinstance(file_path, str):
                 # should not be reachable, as Stores will automatically be detected as RKNS.
                 raise TypeError(
                     f"For external formats  must be str | Path, but is {file_path=}"
                 )
-            rkns = cls._from_external_format(
+            rkns = cls.from_external_format(
                 file_path, file_format=file_format, target_store=target_store
             )
             if populate_from_raw:
@@ -122,22 +238,22 @@ class RKNS:
         return rkns
 
     @classmethod
-    def _from_existing_rkns_store(
+    def from_existing_rkns_store(
         cls,
         store: zarr.storage.StoreLike,
-    ) -> Self:
+    ) -> RKNS:
         # TODO.
         # Should also infer the adapter by itself, since it should be
         # inferrable by the raw node
         raise NotImplementedError()
 
     @classmethod
-    def _from_external_format(
+    def from_external_format(
         cls,
         file_path: str | Path,
         file_format: FileFormat,
         target_store: StoreLike | None,
-    ) -> Self:
+    ) -> RKNS:
         """
         Create /_raw group, fills it with binary data given in file_path,
         and then stores the file as an array within /_raw/signal.
@@ -164,10 +280,18 @@ class RKNS:
             target_store = zarr.storage.MemoryStore()
 
         file_path = Path(file_path)
-        root_node = cls.__init_root(target_store)
+        root_node = cls.__create_root_node(target_store)
 
-        # fill raw node
-        _raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
+        raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
+        cls.__fill_raw_binary(raw_node, file_path, file_format)
+
+        rkns = RKNS(store=target_store)
+        return rkns
+
+    @classmethod
+    def __fill_raw_binary(
+        cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
+    ):
         # TODO this simply loads the whole chunk into memory.
         # this should be doable in a more elegant manner using (variable) chunks
         byte_array = np.fromfile(file_path, dtype=np.uint8)
@@ -188,31 +312,8 @@ class RKNS:
         _raw_signal.attrs["modification_time"] = stat.st_mtime
         _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
-        rkns = cls(store=target_store)
-        return rkns
-
-    def _reconstruct_original_file(self, file_path: str | Path) -> None:
-        signal_array = self._get_raw_signal()
-        # Write the array to the file in binary mode
-        with open(file_path, "wb") as file:
-            file.write(signal_array[:].tobytes())  # type: ignore
-
-    def populate_rkns_from_raw(
-        self, overwrite_if_exists: bool = False, validate: bool = True
-    ) -> Self:
-        self._rkns = self.adapter.populate_rkns_from_raw(
-            raw_node=self._get_raw(),
-            root_node=self._get_root(),
-            overwrite_if_exists=overwrite_if_exists,
-            validate=validate,
-        )
-        return self
-
-    def reset_rkns(self) -> Self:
-        return self.populate_rkns_from_raw(overwrite_if_exists=True)
-
     @classmethod
-    def __init_root(cls, store: StoreLike | None) -> zarr.Group:
+    def __create_root_node(cls, store: StoreLike | None) -> zarr.Group:
         """Initialize the Zarr datastructure for the RKNS object."""
 
         if isinstance(store, str):
@@ -224,15 +325,7 @@ class RKNS:
         root = (
             zarr.create_group(store=store, overwrite=False) if store else zarr.group()
         )
-        root.attrs["rkns_header"] = cls.__make_rkns_header()
+        root.attrs["rkns_header"] = RKNS._make_rkns_header()
         root.attrs["creation_time"] = time()  # current_time_since_epoch
 
         return root
-
-    @staticmethod
-    def __make_rkns_header() -> dict[str, str]:
-        """Generate header for RKNS file. This should contain information relevant for the
-        compatibility between different RKNS versions.
-        It must be a JSON-serializable dict."""
-
-        return {"rkns_version": __version__, "rkns_implementation": "python"}
