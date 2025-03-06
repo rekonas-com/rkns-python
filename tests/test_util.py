@@ -7,7 +7,7 @@ import zarr.codecs
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
 from zarr.storage import MemoryStore
 
-from rkns.util import copy_attributes, copy_group_recursive
+from rkns.util import copy_attributes, copy_group_recursive, import_from_string
 
 
 @pytest.fixture
@@ -173,3 +173,22 @@ def test_copy_group_recursive_array_properties(temp_zarr_store):
     assert target_array.compressors[0].cname.value == "zstd"
     assert target_array.compressors[0].clevel == 3
     assert target_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+
+
+def test_import_from_string():
+    """
+    Tests that import_from_string correctly imports objects from strings.
+
+    Test translated to pytest from
+    https://github.com/django/django/blob/stable/5.1.x/tests/utils_tests/test_module_loading.py
+
+    """
+
+    cls = import_from_string("rkns.util.import_from_string")
+    assert cls == import_from_string
+
+    with pytest.raises(ImportError):
+        import_from_string("no_dots_in_path")
+
+    with pytest.raises(ModuleNotFoundError):
+        import_from_string("utils_tests.unexistent")

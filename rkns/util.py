@@ -45,6 +45,7 @@ def cached_import(module_path: str, class_name: str) -> Any:
 def import_from_string(dotted_path: str) -> Any:
     """
     Import a dotted module path and return the designated class.
+    From Django: https://docs.djangoproject.com/en/5.1/ref/utils/#module-django.utils.module_loading
 
     Parameters
     ----------
@@ -87,18 +88,6 @@ class ZarrMode(Enum):
 
 
 class RKNSNodeNames(str, Enum):
-    """
-
-
-
-    Parameters
-    ----------
-    str
-        _description_
-    Enum
-        _description_
-    """
-
     # Subclassing str to ensure it actually return a string type and not a literal..
     # https://stackoverflow.com/questions/58608361/string-based-enum-in-python
     raw_root = "_raw"
@@ -158,7 +147,6 @@ def get_target_store(
             raise FileExistsError(f"Export target already exists: {path}")
         return zarr.storage.LocalStore(path)
     else:
-        # Assume it's already a zarr store
         return path_or_store
 
 
@@ -207,8 +195,5 @@ def copy_group_recursive(source_group: zarr.Group, target_group: zarr.Group) -> 
 
     # Recursively copy all subgroups
     for name, subgroup in source_group.groups():
-        # Create the target subgroup
         target_subgroup = target_group.create_group(name)
-        # Copy the subgroup attributes
-        # Recursively copy the subgroup contents
         copy_group_recursive(subgroup, target_subgroup)
