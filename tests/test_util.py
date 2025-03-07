@@ -13,7 +13,7 @@ from rkns.util import (
     check_open,
     copy_attributes,
     copy_group_recursive,
-    get_target_store,
+    get_or_create_target_store,
     import_from_string,
 )
 
@@ -203,7 +203,7 @@ class TestGetTargetStore:
     def test_get_target_store_with_valid_path(self, tmp_path):
         path = tmp_path / "test_store"
 
-        store = get_target_store(path)
+        store = get_or_create_target_store(path)
 
         assert isinstance(store, LocalStore)
 
@@ -216,16 +216,16 @@ class TestGetTargetStore:
         with pytest.raises(
             FileExistsError, match=f"Export target already exists: {path}"
         ):
-            get_target_store(path)
+            get_or_create_target_store(path)
 
     def test_get_target_store_with_valid_store(self):
         mock_store = MemoryStore()
-        store = get_target_store(mock_store)
+        store = get_or_create_target_store(mock_store)
         assert store is mock_store
 
     def test_get_target_store_with_invalid_input(self):
         with pytest.raises(TypeError):
-            get_target_store(123)  # type: ignore
+            get_or_create_target_store(123)  # type: ignore
 
 
 @pytest.fixture

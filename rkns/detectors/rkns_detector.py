@@ -27,21 +27,24 @@ def detect_format(path: StoreLike) -> FileFormat:
     """
 
     # Stores are not valid for edfs..
+
     if not isinstance(path, Path) and not isinstance(path, str):
         return FileFormat.UNKNOWN
 
     path = Path(path)
-    if path.suffix.lower() not in [".edf"]:
+    if path.suffix.lower() in [".zip", ".rkns"]:
+        return FileFormat.RKNS
+    else:
         return FileFormat.UNKNOWN
 
-    # Read EDF version from ASCII Character at the beginning of file
-    # see https://www.edfplus.info/specs/edf.html
-    with path.open("rb") as file:
-        first_byte = file.read(8)
+    # # Read EDF version from ASCII Character at the beginning of file
+    # # see https://www.edfplus.info/specs/edf.html
+    # with path.open("rb") as file:
+    #     first_byte = file.read(8)
 
-    # Decode the bytes as an ASCII string
-    edf_version = first_byte.decode("ascii").strip()
-    fileformat = {"0": FileFormat.EDF, "1": FileFormat.EDF_PLUS}.get(
-        edf_version, FileFormat.UNKNOWN
-    )
-    return fileformat
+    # # Decode the bytes as an ASCII string
+    # edf_version = first_byte.decode("ascii").strip()
+    # fileformat = {"0": FileFormat.EDF, "1": FileFormat.EDF_PLUS}.get(
+    #     edf_version, FileFormat.UNKNOWN
+    # )
+    # return fileformat

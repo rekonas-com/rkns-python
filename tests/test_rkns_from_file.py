@@ -14,8 +14,8 @@ paths = ["data_shhs1/shhs1-200001.edf"]
 
 def get_file_md5(path: str | Path) -> str:
     with open(path, "rb") as f:
-        ref_md5 = hashlib.md5(f.read()).hexdigest()  # type: ignore
-    return ref_md5
+        md5 = hashlib.md5(f.read()).hexdigest()  # type: ignore
+    return md5
 
 
 @pytest.mark.parametrize("path", paths)
@@ -23,22 +23,31 @@ def test_populate_rkns_from_raw_edf(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=True)
 
 
-# @pytest.mark.parametrize("path", paths)
-# def test_raw_md5(path):
-#     with (
-#         tempfile.NamedTemporaryFile(mode="w+", delete=True) as temp_file1,
-#         tempfile.NamedTemporaryFile(mode="w+", delete=True) as temp_file2,
-#     ):
-#         rkns_obj1 = RKNS.from_file(temp_file1.name, populate_from_raw=False)
-#         rkns_obj1.populate_rkns_from_raw()
+@pytest.mark.parametrize("path", paths)
+def test_manual_populate_rkns(path):
+    """
+    If the file is manually populated, it should not make a difference..
+    """
 
-#         rkns_obj = RKNS.from_file(temp_file2.name, populate_from_raw=True)
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+    ):
+        temp_file1 = Path(tmpdir) / "file1.rkns"
+        # temp_file2 = Path(tmpdir) / "file2.rkns.zip"
 
-#         rkns_obj._reconstruct_original_file(temp_file.name)
-#         reconstructed_md5 = get_file_md5(temp_file.name)
+        rkns_obj1 = RKNS.from_file(path, populate_from_raw=True)
+        # rkns_obj1.populate_rkns_from_raw()
 
-#     assert md5 == ref_md5 == reconstructed_md5
-#     tmp = rkns_obj._get_raw_signal()
+        # rkns_obj2 = RKNS.from_file(path, populate_from_raw=True)
+
+        rkns_obj1.export(Path(temp_file1))
+        # rkns_obj2.export(Path(temp_file2))
+
+        reloaded1 = RKNS.from_file(temp_file1)
+
+        tree1 = reloaded1._get_root().tree()
+        tree2 = rkns_obj1._get_root().tree()
+        assert str(tree1) == str(tree2)
 
 
 # TODO: This will fail, but is a non-trivial problem of how zarr works.

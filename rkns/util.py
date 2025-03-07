@@ -4,7 +4,7 @@ import sys
 from enum import Enum
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 import zarr
 import zarr.storage
@@ -130,14 +130,17 @@ def add_child_array(
         zarr_array.attrs.update(attributes)
 
 
-def get_target_store(
-    path_or_store: Store | Path | str,
+def get_or_create_target_store(
+    path_or_store: Store | Path | str, mode: Literal["r", "w", "a"] = "w"
 ) -> Store:
     if isinstance(path_or_store, (str, Path)):
         path = Path(path_or_store)
         if path.exists():
             raise FileExistsError(f"Export target already exists: {path}")
-        return zarr.storage.LocalStore(path)
+        if path.suffix == ".zip":
+            return zarr.storage.ZipStore(path, mode=mode)
+        else:
+            return zarr.storage.LocalStore(path, read_only=mode not in ["w", "a"])
     elif isinstance(path_or_store, Store):
         return path_or_store
     else:
