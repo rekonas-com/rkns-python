@@ -86,6 +86,11 @@ class RKNS:
         """
         target_store = get_or_create_target_store(path_or_store)
 
+        if isinstance(target_store, zarr.storage.ZipStore):
+            # The current Zarr implementation has issues with ZIP exports...
+            # That is, attributes are simply not written.
+            raise NotImplementedError()
+
         try:
             target_root = zarr.group(store=target_store, overwrite=True)
             copy_group_recursive(self._get_root(), target_root)

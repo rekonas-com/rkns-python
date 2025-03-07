@@ -176,7 +176,6 @@ def copy_group_recursive(source_group: zarr.Group, target_group: zarr.Group) -> 
         Target group to copy to
     """
     copy_attributes(source_group, target_group)
-
     for name, array in source_group.arrays():
         target_array = target_group.create_array(
             name=name,

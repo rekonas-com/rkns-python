@@ -8,8 +8,8 @@ import zarr
 
 from rkns.rkns import RKNS
 
-# paths = ["tests/files/test.edf"]
-paths = ["data_shhs1/shhs1-200001.edf"]
+paths = ["tests/files/test.edf"]
+# paths = ["data_shhs1/shhs1-200001.edf"]
 
 
 def get_file_md5(path: str | Path) -> str:
@@ -23,8 +23,11 @@ def test_populate_rkns_from_raw_edf(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=True)
 
 
-@pytest.mark.parametrize("path", paths)
-def test_manual_populate_rkns(path):
+@pytest.mark.parametrize(
+    "path, suffix",
+    [(path, suffix) for path in paths for suffix in [".rkns"]],
+)
+def test_export_filesystem(path, suffix):
     """
     If the file is manually populated, it should not make a difference..
     """
@@ -32,7 +35,7 @@ def test_manual_populate_rkns(path):
     with (
         tempfile.TemporaryDirectory() as tmpdir,
     ):
-        temp_file1 = Path(tmpdir) / "file1.rkns"
+        temp_file1 = Path(tmpdir) / f"file1{suffix}"
         # temp_file2 = Path(tmpdir) / "file2.rkns.zip"
 
         rkns_obj1 = RKNS.from_file(path, populate_from_raw=True)
@@ -48,6 +51,26 @@ def test_manual_populate_rkns(path):
         tree1 = reloaded1._get_root().tree()
         tree2 = rkns_obj1._get_root().tree()
         assert str(tree1) == str(tree2)
+
+
+@pytest.mark.parametrize(
+    "path, suffix",
+    [(path, suffix) for path in paths for suffix in [".rkns.zip"]],
+)
+def test_export_zip(path, suffix):
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+    ):
+        temp_file1 = Path(tmpdir) / f"file1{suffix}"
+        # temp_file2 = Path(tmpdir) / "file2.rkns.zip"
+
+        rkns_obj1 = RKNS.from_file(path, populate_from_raw=True)
+        # rkns_obj1.populate_rkns_from_raw()
+
+        # rkns_obj2 = RKNS.from_file(path, populate_from_raw=True)
+
+        with pytest.raises(NotImplementedError):
+            rkns_obj1.export(Path(temp_file1))
 
 
 # TODO: This will fail, but is a non-trivial problem of how zarr works.
