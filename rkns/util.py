@@ -11,8 +11,12 @@ import zarr.storage
 from zarr.abc.store import Store
 
 if TYPE_CHECKING:
+    from typing import TypeVar
+
     from numpy.typing import ArrayLike
     from zarr.abc.codec import BaseCodec
+
+    T = TypeVar("T", bound=type)
 
 
 def cached_import(module_path: str, class_name: str) -> Any:
@@ -213,7 +217,7 @@ def check_open(method: Callable):
     return wrapper
 
 
-def apply_check_open_to_all_methods(cls: Any):
+def apply_check_open_to_all_methods(cls: T) -> T:
     """Apply the @check_open decorator to all methods of a class."""
     for name, method in cls.__dict__.items():
         if (
