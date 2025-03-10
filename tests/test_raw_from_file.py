@@ -7,6 +7,7 @@ import pytest
 import zarr
 
 from rkns.rkns import RKNS
+from rkns.util import RKNSNodeNames
 
 paths = ["tests/files/test.edf"]
 
@@ -20,8 +21,8 @@ def get_file_md5(path: str | Path) -> str:
 @pytest.mark.parametrize("path", paths)
 def test_raw_md5(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=False)
-
-    md5 = rkns_obj._get_raw_signal().attrs["md5"]  # type: ignore
+    _raw_signal = rkns_obj._raw[RKNSNodeNames.raw_signal.value]
+    md5 = _raw_signal.attrs["md5"]  # type: ignore
     ref_md5 = get_file_md5(path)
     assert md5 == ref_md5
 
@@ -29,7 +30,6 @@ def test_raw_md5(path):
         rkns_obj._reconstruct_original_file(temp_file.name)
         reconstructed_md5 = get_file_md5(temp_file.name)
     assert md5 == ref_md5 == reconstructed_md5
-    tmp = rkns_obj._get_raw_signal()
 
 
 # TODO: This will fail, but is a non-trivial problem of how zarr works.

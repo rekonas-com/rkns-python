@@ -48,8 +48,8 @@ def test_export_filesystem(path, suffix):
 
         reloaded1 = RKNS.from_file(temp_file1)
 
-        tree1 = reloaded1._get_root().tree()
-        tree2 = rkns_obj1._get_root().tree()
+        tree1 = reloaded1._root.tree()
+        tree2 = rkns_obj1._root.tree()
         assert str(tree1) == str(tree2)
 
 

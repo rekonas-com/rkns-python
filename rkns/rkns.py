@@ -47,8 +47,8 @@ class RKNS:
 
     def __init__(self, store: zarr.storage.StoreLike) -> None:
         self.store = store
-        self._root = None
-        self._raw = None
+        self.__root = None
+        self.__raw = None
         self._is_closed = False
 
         self.adapter = AdapterRegistry.get_adapter(
@@ -93,38 +93,13 @@ class RKNS:
 
         try:
             target_root = zarr.group(store=target_store, overwrite=True)
-            copy_group_recursive(self._get_root(), target_root)
+            copy_group_recursive(self._root, target_root)
         finally:
             target_store.close()
-        # return RKNS(store=target_store)
-
-    def _get_root(self) -> zarr.Group:
-        if self._root is None:
-            self._root = zarr.open_group(self.store, mode="r+")
-        return self._root
-
-    def _get_raw(self) -> zarr.Group:
-        if self._raw is None:
-            # NOTE: Read only does not seem to work for individual groups
-            # This would have to be done for the whole store.
-            self._raw = zarr.open_group(
-                self.store, path=RKNSNodeNames.raw_root.value, mode="r"
-            )
-        return self._raw
-
-    def _get_rkns(self) -> zarr.Group:
-        if self._rkns is None:
-            self._rkns = zarr.open_group(
-                self.store, path=RKNSNodeNames.raw_root.value, mode="r+"
-            )
-        return self._rkns
-
-    def _get_raw_signal(self) -> zarr.Array:
-        _raw_signal = self._get_raw()[RKNSNodeNames.raw_signal.value]
-        return cast(zarr.Array, _raw_signal)
 
     def get_fileformat_raw_signal(self) -> FileFormat:
-        fileformat_id = self._get_raw_signal().attrs["format"]
+        _raw_signal = self._raw[RKNSNodeNames.raw_signal.value]
+        fileformat_id = _raw_signal.attrs["format"]
         return FileFormat(fileformat_id)
 
     @classmethod
@@ -154,7 +129,7 @@ class RKNS:
         return RKNSBuilder.from_file(file_path, populate_from_raw, target_store)
 
     def _reconstruct_original_file(self, file_path: str | Path) -> None:
-        signal_array = self._get_raw_signal()
+        signal_array = self._raw[RKNSNodeNames.raw_signal.value]
         # Write the array to the file in binary mode
         with open(file_path, "wb") as file:
             file.write(signal_array[:].tobytes())  # type: ignore
@@ -162,9 +137,9 @@ class RKNS:
     def populate_rkns_from_raw(
         self, overwrite_if_exists: bool = False, validate: bool = True
     ) -> Self:
-        self._rkns = self.adapter.populate_rkns_from_raw(
-            raw_node=self._get_raw(),
-            root_node=self._get_root(),
+        self.__rkns = self.adapter.populate_rkns_from_raw(
+            raw_node=self._raw,
+            root_node=self._root,
             overwrite_if_exists=overwrite_if_exists,
             validate=validate,
         )
@@ -189,6 +164,30 @@ class RKNS:
                 self._is_closed = True
             except Exception as e:
                 logger.error(f"Error closing store: {str(e)}", exc_info=True)
+
+    @property
+    def _root(self) -> zarr.Group:
+        if self.__root is None:
+            self.__root = zarr.open_group(self.store, mode="r+")
+        return self.__root
+
+    @property
+    def _raw(self) -> zarr.Group:
+        if self.__raw is None:
+            # NOTE: Read only does not seem to work for individual groups
+            # This would have to be done for the whole store.
+            self.__raw = zarr.open_group(
+                self.store, path=RKNSNodeNames.raw_root.value, mode="r"
+            )
+        return self.__raw
+
+    @property
+    def _rkns(self) -> zarr.Group:
+        if self.__rkns is None:
+            self.__rkns = zarr.open_group(
+                self.store, path=RKNSNodeNames.raw_root.value, mode="r+"
+            )
+        return self.__rkns
 
 
 class RKNSBuilder:
@@ -276,7 +275,7 @@ class RKNSBuilder:
         ).suffix == ".zip":
             root = zarr.group(zarr.storage.ZipStore(store, mode="w"))
         else:
-            root = zarr.open(store, mode="r")
+            root = zarr.open(store, mode="r+")
         # Check the RKNS header
         try:
             rkns_header = cast(dict[str, str], root.attrs["rkns_header"])
