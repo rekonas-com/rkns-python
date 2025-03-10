@@ -21,6 +21,7 @@ def get_file_md5(path: str | Path) -> str:
 @pytest.mark.parametrize("path", paths)
 def test_populate_rkns_from_raw_edf(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=True)
+    # breakpoint()
 
 
 @pytest.mark.parametrize(
