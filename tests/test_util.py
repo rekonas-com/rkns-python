@@ -1,13 +1,16 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
 import zarr
 import zarr.codecs
+from rich.tree import Tree
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
 from zarr.storage import LocalStore, MemoryStore
 
 from rkns.util import (
+    TreeRepr,
+    _group_tree_with_attrs_async,
     add_child_array,
     apply_check_open_to_all_methods,
     check_open,
@@ -400,3 +403,91 @@ class TestCheckOpenDecorator:
         assert test_instance.static_method() == "Static method"
         assert test_instance.class_method() == "Class method"
         assert test_instance.instance_method() == "Instance method"
+
+
+class TestTreeOverview:
+    """
+    1. `test_group_tree_with_attrs_async_basic`:
+    Verifies that the function correctly generates a tree representation with basic attributes.
+    2. `test_group_tree_with_attrs_async_with_attributes`:
+    Checks that the function includes nested attributes in the tree representation.
+    3. `test_group_tree_with_attrs_async_no_attributes`:
+    Ensures that the function excludes attributes from the tree representation when `show_attrs` is set to `False`.
+
+    Each test uses mock objects to simulate the behavior of the `_group_tree_with_attrs_async` function and asserts that the generated tree representation contains the expected information.
+    """
+
+    @pytest.mark.asyncio
+    async def test_group_tree_with_attrs_async_basic(self):
+        mock_group = AsyncMock()
+        mock_group.name = "root"
+
+        async def mock_members(max_depth=None):
+            yield "child", MagicMock(shape=(10,), dtype="int32", attrs={})
+
+        mock_group.members = mock_members
+
+        tree_repr = await _group_tree_with_attrs_async(
+            mock_group, max_depth=None, show_attrs=True
+        )
+
+        assert isinstance(tree_repr, TreeRepr)
+        assert "root" in repr(tree_repr)
+        assert "child" in repr(tree_repr)
+        assert "(10,)" in repr(tree_repr)
+        assert "int32" in repr(tree_repr)
+
+        assert "[Attributes]" not in repr(tree_repr)
+        assert "length" not in repr(tree_repr)
+
+    @pytest.mark.asyncio
+    async def test_group_tree_with_attrs_async_with_attributes(self):
+        mock_group = AsyncMock()
+        mock_group.name = "root"
+
+        async def mock_members(max_depth=None):
+            yield (
+                "child",
+                MagicMock(
+                    shape=(10,),
+                    dtype="int32",
+                    attrs={"key": {"morekeys": "morevalues"}},
+                ),
+            )
+
+        mock_group.members = mock_members
+
+        tree_repr = await _group_tree_with_attrs_async(
+            mock_group, max_depth=None, show_attrs=True
+        )
+
+        assert isinstance(tree_repr, TreeRepr)
+        assert "root" in repr(tree_repr)
+        assert "child" in repr(tree_repr)
+        assert "(10,)" in repr(tree_repr)
+        assert "int32" in repr(tree_repr)
+        assert "key" in repr(tree_repr)
+        assert "[Attributes]" in repr(tree_repr)
+        assert "length" in repr(tree_repr)
+
+    @pytest.mark.asyncio
+    async def test_group_tree_with_attrs_async_no_attributes(self):
+        mock_group = AsyncMock()
+        mock_group.name = "root"
+
+        async def mock_members(max_depth=None):
+            yield "child", MagicMock(shape=(10,), dtype="int32", attrs={})
+
+        mock_group.members = mock_members
+
+        tree_repr = await _group_tree_with_attrs_async(
+            mock_group, max_depth=None, show_attrs=False
+        )
+
+        assert isinstance(tree_repr, TreeRepr)
+        assert "root" in repr(tree_repr)
+        assert "child" in repr(tree_repr)
+        assert "(10,)" in repr(tree_repr)
+        assert "int32" in repr(tree_repr)
+        assert "[Attributes]" not in repr(tree_repr)
+        assert "length" not in repr(tree_repr)

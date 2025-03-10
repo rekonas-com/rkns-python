@@ -5,7 +5,7 @@ import warnings
 from hashlib import md5
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import zarr
@@ -24,6 +24,7 @@ from rkns.util import (
     copy_attributes,
     copy_group_recursive,
     get_or_create_target_store,
+    group_tree_with_attrs_async,
 )
 from rkns.version import __version__
 
@@ -164,6 +165,29 @@ class RKNS:
                 self._is_closed = True
             except Exception as e:
                 logger.error(f"Error closing store: {str(e)}", exc_info=True)
+
+    @property
+    def tree(self, max_depth: int | None = None, show_attrs: bool = True) -> Any:
+        """
+        Provide a tree-like overview of the underlying zarr structure.
+        Includes groups, array shapes and types, and top-level keys of attributes.
+
+        Parameters
+        ----------
+        max_depth, optional
+            _description_, by default None
+        show_attrs, optional
+            _description_, by default True
+
+        Returns
+        -------
+            _description_
+        """
+        return self._root._sync(
+            group_tree_with_attrs_async(
+                self._root._async_group, max_depth=max_depth, show_attrs=show_attrs
+            )
+        )
 
     @property
     def _root(self) -> zarr.Group:
