@@ -16,6 +16,7 @@ from typing import (
 import numpy as np
 import zarr
 import zarr.storage
+from zarr import AsyncGroup
 from zarr.abc.store import Store
 
 if TYPE_CHECKING:
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
     from typing import TypeVar
 
     from numpy.typing import ArrayLike
-    from zarr import AsyncGroup
     from zarr.abc.codec import BaseCodec
     from zarr.core.common import JSON
 
@@ -227,6 +227,14 @@ async def deep_compare_async_groups(
             f"Number of members does not match: {len(members1)} vs {len(members2)}"
         )
 
+    if compare_attributes:
+        attrs1 = group1.attrs
+        attrs2 = group2.attrs
+        if attrs1.keys() != attrs2.keys():
+            raise AttributeMismatchError(f"Attribute keys do not match for root node.")
+        if not compare_attrs(attrs1, attrs2):
+            raise AttributeMismatchError(f"Attribute values do not match at root node.")
+
     # Iterate through members simultaneously
     for (key1, node1), (key2, node2) in zip(members1, members2):
         if key1 != key2:
@@ -259,11 +267,8 @@ async def deep_compare_async_groups(
                 raise AttributeMismatchError(
                     f"Attribute keys do not match for key '{key1}': {attrs1.keys()} vs {attrs2.keys()}"
                 )
-            for key in attrs1.keys():
-                if not compare_attrs(attrs1[key], attrs2[key]):
-                    raise AttributeMismatchError(
-                        f"Attribute values do not match for key '{key1}.{key}': {attrs1[key]} vs {attrs2[key]}"
-                    )
+            if not compare_attrs(attrs1, attrs2):
+                raise AttributeMismatchError(f"Attribute values do not match.")
 
     return True
 

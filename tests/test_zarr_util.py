@@ -324,6 +324,8 @@ class TestAddChildArray:
         ({"a": 1, "b": 2}, {"a": 1}, False),
         ({"a": {"b": 2}}, {"a": {"b": 2}}, True),
         ({"a": {"b": 2}}, {"a": {"b": 3}}, False),
+        ({"a": "val"}, {"a": "val2"}, False),
+        ({"a": "val"}, {"a": "val"}, True),
         # Test with iterables (excluding strings and bytes)
         ([1, 2, 3], [1, 2, 3], True),
         ([1, 2, 3], [1, 2, 4], False),
@@ -346,3 +348,168 @@ def test_compare_attrs_empty_structures():
     assert compare_attrs((), ())
     assert not compare_attrs({}, [])  # type: ignore
     assert not compare_attrs([], ())  # type: ignore
+
+
+import numpy as np
+import pytest
+from zarr import AsyncGroup
+
+from rkns.util.zarr_util import (
+    ArrayShapeMismatchError,
+    ArrayValueMismatchError,
+    AttributeMismatchError,
+    GroupComparisonError,
+    GroupNameMismatchError,
+    KeyMismatchError,
+    MemberCountMismatchError,
+    NameMismatchError,
+    RKNSParseError,
+    deep_compare_async_groups,
+)
+
+
+class MockGroup(AsyncGroup):
+    def __init__(self, name):
+        self._name = name
+        self._attrs = {}
+
+    async def members(self, max_depth=None):
+        for item in []:
+            yield item
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    @property
+    def attrs(self):
+        return self._attrs
+
+    @attrs.setter
+    def attrs(self, value):
+        self._attrs = value
+
+
+@pytest.fixture
+def mock_group1():
+    return MockGroup(name)
+
+
+@pytest.fixture
+def mock_group2():
+    return MockGroup(name)
+
+
+@pytest.fixture
+def mock_array():
+    return np.array([1, 2, 3])
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_success(mock_group1, mock_group2):
+    group1 = mock_group1
+    group2 = mock_group2
+
+    # Test successful comparison
+    assert await deep_compare_async_groups(group1, group2) == True
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_name_mismatch(mock_group1, mock_group2):
+    mock_group2.name = "different_name"
+    with pytest.raises(NameMismatchError):
+        await deep_compare_async_groups(mock_group1, mock_group2)
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_member_count_mismatch(
+    mock_group1, mock_group2
+):
+    async def mock_members1(max_depth=None):
+        yield ("key1", np.array([1, 2, 3]))
+
+    async def mock_members2(max_depth=None):
+        if False:
+            yield
+
+    mock_group1.members = mock_members1
+    mock_group2.members = mock_members2
+
+    with pytest.raises(MemberCountMismatchError):
+        await deep_compare_async_groups(mock_group1, mock_group2)
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_key_mismatch(
+    mock_group1, mock_group2, mock_array
+):
+    async def mock_members1(max_depth=None):
+        yield ("key1", MockGroup("a"))
+
+    async def mock_members2(max_depth=None):
+        yield ("key2", MockGroup("a"))
+
+    mock_group1.members = mock_members1
+    mock_group2.members = mock_members2
+
+    with pytest.raises(KeyMismatchError):
+        await deep_compare_async_groups(mock_group1, mock_group2)
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_array_shape_mismatch(mock_group1, mock_group2):
+    async def mock_members1(max_depth=None):
+        yield ("key1", np.array([1, 2, 3]))
+
+    async def mock_members2(max_depth=None):
+        yield ("key1", np.array([1, 2]))
+
+    mock_group1.members = mock_members1
+    mock_group2.members = mock_members2
+
+    with pytest.raises(ArrayShapeMismatchError):
+        await deep_compare_async_groups(mock_group1, mock_group2)
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_array_value_mismatch(mock_group1, mock_group2):
+    async def mock_members1(max_depth=None):
+        yield ("key1", np.array([1, 2, 3]))
+
+    async def mock_members2(max_depth=None):
+        yield ("key1", np.array([1, 2, 4]))
+
+    mock_group1.members = mock_members1
+    mock_group2.members = mock_members2
+
+    with pytest.raises(ArrayValueMismatchError):
+        await deep_compare_async_groups(mock_group1, mock_group2, compare_values=True)
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_group_name_mismatch(mock_group1, mock_group2):
+    async def mock_members1(max_depth=None):
+        yield ("key1", MockGroup("a"))
+
+    async def mock_members2(max_depth=None):
+        yield ("key1", MockGroup("ab"))
+
+    mock_group1.members = mock_members1
+    mock_group2.members = mock_members2
+
+    with pytest.raises(GroupNameMismatchError):
+        await deep_compare_async_groups(mock_group1, mock_group2)
+
+
+@pytest.mark.asyncio
+async def test_deep_compare_async_groups_attribute_mismatch(mock_group1, mock_group2):
+    mock_group1.attrs = {"attr1": "value1"}
+    mock_group2.attrs = {"attr1": "value2"}
+    with pytest.raises(AttributeMismatchError):
+        await deep_compare_async_groups(
+            mock_group1, mock_group2, compare_attributes=True
+        )
