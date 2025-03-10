@@ -342,7 +342,7 @@ def test_compare_attrs(attr1, attr2, expected):
 
 def test_compare_attrs_empty_structures():
     assert compare_attrs({}, {})
-    assert compare_attrs([], [])
+    assert compare_attrs([], [])  # type: ignore
     assert compare_attrs((), ())
-    assert not compare_attrs({}, [])
-    assert not compare_attrs([], ())
+    assert not compare_attrs({}, [])  # type: ignore
+    assert not compare_attrs([], ())  # type: ignore
