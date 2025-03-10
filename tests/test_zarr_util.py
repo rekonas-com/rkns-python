@@ -1,3 +1,4 @@
+from typing import Iterable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -6,17 +7,12 @@ import zarr
 import zarr.codecs
 from rich.tree import Tree
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
+from zarr.core.common import JSON
 from zarr.storage import LocalStore, MemoryStore
 
-from rkns.util.misc import (
-    TreeRepr,
-    _group_tree_with_attrs_async,
-    apply_check_open_to_all_methods,
-    check_open,
-    import_from_string,
-)
 from rkns.util.zarr_util import (
     add_child_array,
+    compare_attrs,
     copy_attributes,
     copy_group_recursive,
     get_or_create_target_store,
@@ -307,3 +303,46 @@ class TestAddChildArray:
         assert zarr_array.compressors[0].cname.value == "zstd"
         assert zarr_array.compressors[0].clevel == 3
         assert zarr_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+
+
+# Test cases for _compare_attrs function
+@pytest.mark.parametrize(
+    "attr1, attr2, expected",
+    [
+        # Test with primitive types
+        (5, 5, True),
+        (5, 6, False),
+        ("hello", "hello", True),
+        ("hello", "world", False),
+        (3.14, 3.14, True),
+        (3.14, 2.71, False),
+        (None, None, True),
+        (None, 0, False),
+        # Test with dictionaries
+        ({"a": 1, "b": 2}, {"a": 1, "b": 2}, True),
+        ({"a": 1, "b": 2}, {"a": 1, "b": 3}, False),
+        ({"a": 1, "b": 2}, {"a": 1}, False),
+        ({"a": {"b": 2}}, {"a": {"b": 2}}, True),
+        ({"a": {"b": 2}}, {"a": {"b": 3}}, False),
+        # Test with iterables (excluding strings and bytes)
+        ([1, 2, 3], [1, 2, 3], True),
+        ([1, 2, 3], [1, 2, 4], False),
+        ((1, 2, 3), (1, 2, 3), True),
+        ((1, 2, 3), (1, 2, 4), False),
+        ([1, 2, 3], (1, 2, 3), False),
+        ([1, 2, 3], (1, 2, 4), False),
+        # Test with mixed types
+        ({"a": [1, 2, 3], "b": {"c": 4}}, {"a": [1, 2, 3], "b": {"c": 4}}, True),
+        ({"a": [1, 2, 3], "b": {"c": 4}}, {"a": [1, 2, 3], "b": {"c": 5}}, False),
+    ],
+)
+def test_compare_attrs(attr1, attr2, expected):
+    assert compare_attrs(attr1, attr2) == expected
+
+
+def test_compare_attrs_empty_structures():
+    assert compare_attrs({}, {})
+    assert compare_attrs([], [])
+    assert compare_attrs((), ())
+    assert not compare_attrs({}, [])
+    assert not compare_attrs([], ())

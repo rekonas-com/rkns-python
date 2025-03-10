@@ -2,17 +2,30 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal, Sequence, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterable,
+    Literal,
+    Optional,
+    Sequence,
+    cast,
+)
 
+import numpy as np
 import zarr
 import zarr.storage
 from zarr.abc.store import Store
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from typing import TypeVar
 
     from numpy.typing import ArrayLike
+    from zarr import AsyncGroup
     from zarr.abc.codec import BaseCodec
+    from zarr.core.common import JSON
 
     T = TypeVar("T", bound=type)
 
@@ -113,3 +126,177 @@ def copy_group_recursive(source_group: zarr.Group, target_group: zarr.Group) -> 
 
 class RKNSParseError(Exception):
     pass
+
+
+class GroupComparisonError(Exception):
+    """Base exception for group comparison failures."""
+
+    pass
+
+
+class NameMismatchError(GroupComparisonError):
+    """Raised when group names do not match."""
+
+    pass
+
+
+class MemberCountMismatchError(GroupComparisonError):
+    """Raised when the number of members in groups do not match."""
+
+    pass
+
+
+class KeyMismatchError(GroupComparisonError):
+    """Raised when keys (paths) of members do not match."""
+
+    pass
+
+
+class ArrayShapeMismatchError(GroupComparisonError):
+    """Raised when array shapes do not match."""
+
+    pass
+
+
+class ArrayValueMismatchError(GroupComparisonError):
+    """Raised when array values do not match."""
+
+    pass
+
+
+class GroupNameMismatchError(GroupComparisonError):
+    """Raised when nested group names do not match."""
+
+    pass
+
+
+class AttributeMismatchError(GroupComparisonError):
+    """Raised when attributes do not match."""
+
+    pass
+
+
+async def deep_compare_async_groups(
+    group1: AsyncGroup,
+    group2: AsyncGroup,
+    max_depth: Optional[int] = None,
+    compare_values: bool = True,
+    compare_attributes: bool = True,
+) -> bool:
+    """
+    Perform a deep comparison of two AsyncGroup objects.
+    Defaults to the complete, most expensive comparison.
+    Adjust max_depth, compare_values and compare_attributes for a lighter comparison
+
+    Parameters
+    ----------
+    group1 : AsyncGroup
+        The first async group to compare.
+    group2 : AsyncGroup
+        The second async group to compare.
+    max_depth : Optional[int], optional
+        The maximum depth to compare, by default None (unlimited).
+    compare_values : bool, optional
+        Whether to compare the actual array values, by default False (only compare shapes).
+    show_attrs : bool, optional
+        Whether to show and compare attributes, by default True.
+
+    Returns
+    -------
+    bool
+        True if the groups are equal.
+
+    Raises
+    ------
+    GroupComparisonError
+        If the groups are not equal, with detailed explanation of the failure.
+    """
+    # Preliminary checks
+    if group1.name != group2.name:
+        raise NameMismatchError(
+            f"Group names do not match: '{group1.name}' vs '{group2.name}'"
+        )
+
+    # Get members of both groups
+    members1 = sorted([x async for x in group1.members(max_depth=max_depth)])
+    members2 = sorted([x async for x in group2.members(max_depth=max_depth)])
+
+    # Check if the number of members is the same
+    if len(members1) != len(members2):
+        raise MemberCountMismatchError(
+            f"Number of members does not match: {len(members1)} vs {len(members2)}"
+        )
+
+    # Iterate through members simultaneously
+    for (key1, node1), (key2, node2) in zip(members1, members2):
+        if key1 != key2:
+            raise KeyMismatchError(f"Keys do not match: '{key1}' vs '{key2}'")
+
+        if isinstance(node1, np.ndarray) and isinstance(node2, np.ndarray):
+            if node1.shape != node2.shape:
+                raise ArrayShapeMismatchError(
+                    f"Array shapes do not match for key '{key1}': {node1.shape} vs {node2.shape}"
+                )
+            if compare_values and not np.array_equal(node1, node2):
+                raise ArrayValueMismatchError(
+                    f"Array values do not match for key '{key1}'"
+                )
+        elif isinstance(node1, AsyncGroup) and isinstance(node2, AsyncGroup):
+            if node1.name != node2.name:
+                raise GroupNameMismatchError(
+                    f"Group names do not match for key '{key1}': '{node1.name}' vs '{node2.name}'"
+                )
+        else:
+            if node1 != node2:
+                raise GroupComparisonError(
+                    f"Nodes do not match for key '{key1}': {node1} vs {node2}"
+                )
+
+        if compare_attributes:
+            attrs1 = node1.attrs
+            attrs2 = node2.attrs
+            if attrs1.keys() != attrs2.keys():
+                raise AttributeMismatchError(
+                    f"Attribute keys do not match for key '{key1}': {attrs1.keys()} vs {attrs2.keys()}"
+                )
+            for key in attrs1.keys():
+                if not compare_attrs(attrs1[key], attrs2[key]):
+                    raise AttributeMismatchError(
+                        f"Attribute values do not match for key '{key1}.{key}': {attrs1[key]} vs {attrs2[key]}"
+                    )
+
+    return True
+
+
+def compare_attrs(attr1: JSON, attr2: JSON) -> bool:
+    """
+    Helper function to compare attributes, including nested dictionaries.
+
+    Parameters
+    ----------
+    attr1 : Any
+        The first attribute to compare.
+    attr2 : Any
+        The second attribute to compare.
+
+    Returns
+    -------
+    bool
+        True if the attributes are equal, False otherwise.
+    """
+    if isinstance(attr1, dict) and isinstance(attr2, dict):
+        if attr1.keys() != attr2.keys():
+            return False
+        for key in attr1.keys():
+            if not compare_attrs(attr1[key], attr2[key]):
+                return False
+        return True
+    elif (
+        type(attr1) is type(attr2)
+        and isinstance(attr1, Iterable)
+        and isinstance(attr2, Iterable)
+        and not isinstance(attr1, (str, bytes))
+    ):
+        return len(attr1) == len(attr2) and all(a == b for a, b in zip(attr1, attr2))
+    else:
+        return attr1 == attr2
