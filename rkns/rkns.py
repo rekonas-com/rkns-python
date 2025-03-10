@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from zarr.abc.store import Store
     from zarr.storage import StoreLike, StorePath
 
+    from rkns.util import TreeRepr
 
 RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
 
@@ -167,7 +168,7 @@ class RKNS:
                 logger.error(f"Error closing store: {str(e)}", exc_info=True)
 
     @property
-    def tree(self, max_depth: int | None = None, show_attrs: bool = True) -> Any:
+    def tree(self, max_depth: int | None = None, show_attrs: bool = True) -> TreeRepr:
         """
         Provide a tree-like overview of the underlying zarr structure.
         Includes groups, array shapes and types, and top-level keys of attributes.
@@ -175,13 +176,13 @@ class RKNS:
         Parameters
         ----------
         max_depth, optional
-            _description_, by default None
+            Max depth to be shown, by default None
         show_attrs, optional
-            _description_, by default True
+            Whether attributes should be shown, by default True
 
         Returns
         -------
-            _description_
+            TODO: Not exactly sure what it
         """
         return self._root._sync(
             group_tree_with_attrs_async(
