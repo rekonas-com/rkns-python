@@ -1320,14 +1320,14 @@ files = [
 
 [[package]]
 name = "zarr"
-version = "3.0.1"
+version = "3.0.5"
 description = "An implementation of chunked, compressed, N-dimensional arrays for Python"
 optional = false
 python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "zarr-3.0.1-py3-none-any.whl", hash = "sha256:728a2132c4c6a5014fb8bbef8fbd71d5f0991d8f9066bc14e670595526c31a6b"},
-    {file = "zarr-3.0.1.tar.gz", hash = "sha256:033859c5603dc9c29e53af494ede24b42f1b761d2bb625466990a3b8a9afb792"},
+    {file = "zarr-3.0.5-py3-none-any.whl", hash = "sha256:e56f8cf1f8105a118a9cdadb78f3b44363b9c67f326a569d79271a1f1cb338e1"},
+    {file = "zarr-3.0.5.tar.gz", hash = "sha256:4ac0a09d66875d398ab53c95fd4bddca2f3d757a04454831fc2d54bfbafcb7e5"},
 ]
 
 [package.dependencies]
@@ -1338,11 +1338,11 @@ packaging = ">=22.0"
 typing-extensions = ">=4.9"
 
 [package.extras]
-docs = ["numcodecs[msgpack]", "numpydoc", "pydata-sphinx-theme", "rich", "s3fs", "sphinx (==8.1.3)", "sphinx-autoapi (==3.4.0)", "sphinx-autobuild (>=2021.3.14)", "sphinx-copybutton", "sphinx-design", "sphinx-issues", "sphinx-reredirects"]
+docs = ["astroid (<4)", "numcodecs[msgpack]", "numpydoc", "pydata-sphinx-theme", "rich", "s3fs", "sphinx (==8.1.3)", "sphinx-autoapi (==3.4.0)", "sphinx-autobuild (>=2021.3.14)", "sphinx-copybutton", "sphinx-design", "sphinx-issues", "sphinx-reredirects", "towncrier"]
 gpu = ["cupy-cuda12x"]
 optional = ["rich", "universal-pathlib"]
 remote = ["fsspec (>=2023.10.0)"]
-test = ["coverage", "hypothesis", "moto[s3,server]", "mypy", "pytest", "pytest-accept", "pytest-asyncio", "pytest-cov", "requests", "rich", "s3fs", "universal-pathlib"]
+test = ["botocore", "coverage", "fsspec (>=2023.10.0)", "hypothesis", "moto[s3,server]", "mypy", "pytest", "pytest-accept", "pytest-asyncio", "pytest-cov", "requests", "rich", "s3fs", "universal-pathlib"]
 
 [metadata]
 lock-version = "2.1"
