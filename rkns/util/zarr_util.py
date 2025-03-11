@@ -16,8 +16,9 @@ from typing import (
 import numpy as np
 import zarr
 import zarr.storage
-from zarr import AsyncGroup
+from zarr import Array, AsyncArray, AsyncGroup, Group
 from zarr.abc.store import Store
+from zarr.core.attributes import Attributes
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -146,7 +147,7 @@ class MemberCountMismatchError(GroupComparisonError):
     pass
 
 
-class KeyMismatchError(GroupComparisonError):
+class PathMismatchError(GroupComparisonError):
     """Raised when keys (paths) of members do not match."""
 
     pass
@@ -164,7 +165,7 @@ class ArrayValueMismatchError(GroupComparisonError):
     pass
 
 
-class GroupNameMismatchError(GroupComparisonError):
+class GroupPathMismatchError(GroupComparisonError):
     """Raised when nested group names do not match."""
 
     pass
@@ -176,15 +177,15 @@ class AttributeMismatchError(GroupComparisonError):
     pass
 
 
-async def deep_compare_async_groups(
-    group1: AsyncGroup,
-    group2: AsyncGroup,
+def deep_compare_async_groups(
+    group1: Group,
+    group2: Group,
     max_depth: Optional[int] = None,
     compare_values: bool = True,
     compare_attributes: bool = True,
 ) -> bool:
     """
-    Perform a deep comparison of two AsyncGroup objects.
+    Perform a deep comparison of two Group objects.
     Defaults to the complete, most expensive comparison.
     Adjust max_depth, compare_values and compare_attributes for a lighter comparison
 
@@ -211,6 +212,12 @@ async def deep_compare_async_groups(
     GroupComparisonError
         If the groups are not equal, with detailed explanation of the failure.
     """
+
+    if not isinstance(group1, Group) or not isinstance(group2, Group):
+        raise TypeError(
+            f"Function not available for types {type(group1)} and {type(group1)}."
+        )
+
     # Preliminary checks
     if group1.name != group2.name:
         raise NameMismatchError(
@@ -218,8 +225,8 @@ async def deep_compare_async_groups(
         )
 
     # Get members of both groups
-    members1 = sorted([x async for x in group1.members(max_depth=max_depth)])
-    members2 = sorted([x async for x in group2.members(max_depth=max_depth)])
+    members1 = sorted([x for x in group1.members(max_depth=max_depth)])
+    members2 = sorted([x for x in group2.members(max_depth=max_depth)])
 
     # Check if the number of members is the same
     if len(members1) != len(members2):
@@ -228,37 +235,39 @@ async def deep_compare_async_groups(
         )
 
     if compare_attributes:
-        attrs1 = group1.attrs
-        attrs2 = group2.attrs
-        if attrs1.keys() != attrs2.keys():
-            raise AttributeMismatchError(f"Attribute keys do not match for root node.")
-        if not compare_attrs(attrs1, attrs2):
-            raise AttributeMismatchError(f"Attribute values do not match at root node.")
+        if not compare_attrs(group1.attrs, group2.attrs):
+            raise AttributeMismatchError("Attribute values do not match at root node.")
 
     # Iterate through members simultaneously
     for (key1, node1), (key2, node2) in zip(members1, members2):
+        node1_type = type(node1)
+        node2_type = type(node2)
         if key1 != key2:
-            raise KeyMismatchError(f"Keys do not match: '{key1}' vs '{key2}'")
+            raise PathMismatchError(f"Keys do not match: '{key1}' vs '{key2}'")
+        if node1_type != node2_type:
+            raise GroupComparisonError(
+                f"Nodes do not match for key '{key1}': {node1} vs {node2}"
+            )
 
-        if isinstance(node1, np.ndarray) and isinstance(node2, np.ndarray):
+        if issubclass(node1_type, Array):
+            node1, node2 = cast(Array, node1), cast(Array, node2)
             if node1.shape != node2.shape:
                 raise ArrayShapeMismatchError(
                     f"Array shapes do not match for key '{key1}': {node1.shape} vs {node2.shape}"
                 )
-            if compare_values and not np.array_equal(node1, node2):
+            if compare_values and not np.allclose(node1[:], node2[:]):
                 raise ArrayValueMismatchError(
                     f"Array values do not match for key '{key1}'"
                 )
-        elif isinstance(node1, AsyncGroup) and isinstance(node2, AsyncGroup):
-            if node1.name != node2.name:
-                raise GroupNameMismatchError(
-                    f"Group names do not match for key '{key1}': '{node1.name}' vs '{node2.name}'"
-                )
-        else:
-            if node1 != node2:
-                raise GroupComparisonError(
-                    f"Nodes do not match for key '{key1}': {node1} vs {node2}"
-                )
+        # elif issubclass(node1_type, AsyncGroup) and (node1.name != node2.name):
+        #     raise GroupPathMismatchError(
+        #         f"Group paths do not match for key '{key1}': '{node1.name}' vs '{node2.name}'"
+        #     )
+        # elif node1 != node2:
+        #     breakpoint()
+        #     raise GroupComparisonError(
+        #         f"Nodes do not match for key '{key1}': {node1} vs {node2}"
+        #     )
 
         if compare_attributes:
             attrs1 = node1.attrs
@@ -268,7 +277,7 @@ async def deep_compare_async_groups(
                     f"Attribute keys do not match for key '{key1}': {attrs1.keys()} vs {attrs2.keys()}"
                 )
             if not compare_attrs(attrs1, attrs2):
-                raise AttributeMismatchError(f"Attribute values do not match.")
+                raise AttributeMismatchError("Attribute values do not match.")
 
     return True
 
@@ -289,6 +298,10 @@ def compare_attrs(attr1: JSON, attr2: JSON) -> bool:
     bool
         True if the attributes are equal, False otherwise.
     """
+    if isinstance(attr1, Attributes):
+        attr1 = dict(attr1)
+    if isinstance(attr2, Attributes):
+        attr2 = dict(attr2)
     if isinstance(attr1, dict) and isinstance(attr2, dict):
         if attr1.keys() != attr2.keys():
             return False
