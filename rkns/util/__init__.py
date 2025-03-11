@@ -6,10 +6,7 @@ from .misc import (
     group_tree_with_attrs_async,
     import_from_string,
 )
-from .rkns_util import (
-    RKNSNodeNames,
-    check_rkns_validity,
-)
+from .rkns_util import RKNSNodeNames, check_rkns_validity, check_validity
 from .zarr_util import (
     RKNSParseError,
     ZarrMode,

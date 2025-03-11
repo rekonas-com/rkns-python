@@ -20,7 +20,7 @@ from rkns.util import (
     RKNSNodeNames,
     RKNSParseError,
     apply_check_open_to_all_methods,
-    check_rkns_validity,
+    check_validity,
     copy_attributes,
     copy_group_recursive,
     get_or_create_target_store,
@@ -342,7 +342,7 @@ class RKNSBuilder:
             )
 
         if validate:
-            check_rkns_validity(root)
+            check_validity(root)
 
         return RKNS(store=store)
 
@@ -383,6 +383,11 @@ class RKNSBuilder:
 
         raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
         cls.__fill_raw_binary(raw_node, file_path, file_format)
+
+        # create history and popis groups
+        # TODO: We did not yet define the structure..
+        root_node.create_group(name=RKNSNodeNames.history.value)
+        root_node.create_group(name=RKNSNodeNames.popis.value)
 
         rkns = RKNS(store=target_store)
 

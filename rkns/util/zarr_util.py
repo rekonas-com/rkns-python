@@ -57,7 +57,7 @@ def add_child_array(
     zarr_array[:] = data
 
     if attributes is not None:
-        zarr_array.attrs.update(attributes)
+        zarr_array.update_attributes(attributes)
 
 
 def get_or_create_target_store(

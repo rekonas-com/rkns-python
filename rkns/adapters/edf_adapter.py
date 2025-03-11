@@ -104,11 +104,11 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         fg_arrays, fg_attributes, rkns_attributes = cls.extract_data(
             channel_data, signal_headers, header, validate=validate
         )
-        rkns_node.attrs.update(rkns_attributes)
+        rkns_node.update_attributes(rkns_attributes)
 
         for fg in fg_arrays.keys():
             fg_node = rkns_node.create_group(fg)
-            fg_node.attrs.update(fg_attributes[fg])
+            fg_node.update_attributes(fg_attributes[fg])
             add_child_array(
                 parent_node=fg_node,
                 data=fg_arrays[fg]["signal"],
