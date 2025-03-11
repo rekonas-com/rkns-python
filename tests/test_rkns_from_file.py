@@ -7,7 +7,7 @@ import pytest
 import zarr
 
 from rkns.rkns import RKNS
-from rkns.util import deep_compare_groups
+from rkns.util import check_validity, deep_compare_groups
 
 paths = ["tests/files/test.edf"]
 # paths = ["data_shhs1/shhs1-200001.edf"]
@@ -22,7 +22,7 @@ def get_file_md5(path: str | Path) -> str:
 @pytest.mark.parametrize("path", paths)
 def test_populate_rkns_from_raw_edf(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=True)
-    # breakpoint()
+    check_validity(rkns_obj._root)
 
 
 @pytest.mark.parametrize(
@@ -68,7 +68,7 @@ def test_export_zip(path, suffix):
 # @pytest.mark.parametrize("path", paths)
 # def test_raw_readonly(path):
 #     rkns_obj = RKNS.from_file(path, populate_from_raw=False)
-#     raw_node = rkns_obj._get_raw()
+#     raw_node = rkns_obj._raw
 #     assert not raw_node.store.supports_writes
 
 
