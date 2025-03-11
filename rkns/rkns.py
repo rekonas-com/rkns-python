@@ -5,7 +5,7 @@ import warnings
 from hashlib import md5
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 import numpy as np
 import zarr
@@ -26,6 +26,7 @@ from rkns.util import (
     get_or_create_target_store,
     group_tree_with_attrs_async,
 )
+from rkns.util.zarr_util import deep_compare_groups
 from rkns.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,21 @@ class RKNS:
         It must be a JSON-serializable dict."""
 
         return {"rkns_version": __version__, "rkns_implementation": "python"}
+
+    def is_equal_to(
+        self,
+        other: RKNS,
+        max_depth: Optional[int] = None,
+        compare_values: bool = True,
+        compare_attributes: bool = True,
+    ) -> bool:
+        return deep_compare_groups(
+            self._root,
+            other._root,
+            max_depth=max_depth,
+            compare_values=compare_values,
+            compare_attributes=compare_attributes,
+        )
 
     def export(self, path_or_store: Store | Path | str) -> None:
         """

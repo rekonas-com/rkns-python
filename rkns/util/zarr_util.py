@@ -177,7 +177,7 @@ class AttributeMismatchError(GroupComparisonError):
     pass
 
 
-def deep_compare_async_groups(
+def deep_compare_groups(
     group1: Group,
     group2: Group,
     max_depth: Optional[int] = None,

@@ -23,7 +23,7 @@ from rkns.util.zarr_util import (
     compare_attrs,
     copy_attributes,
     copy_group_recursive,
-    deep_compare_async_groups,
+    deep_compare_groups,
     get_or_create_target_store,
 )
 
@@ -370,14 +370,14 @@ def generate_group(path="group1") -> zarr.Group:
 def test_deep_compare_async_groups_success():
     group1 = generate_group("group1")
     group2 = generate_group("group1")
-    assert deep_compare_async_groups(group1, group2)
+    assert deep_compare_groups(group1, group2)
 
 
 def test_deep_compare_async_groups_name_mismatch():
     mock_group1 = generate_group("group1")
     mock_group2 = generate_group("group2")
     with pytest.raises(NameMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2)
+        deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_member_count_mismatch():
@@ -386,7 +386,7 @@ def test_deep_compare_async_groups_member_count_mismatch():
     mock_group1.create_group("subgroup")
 
     with pytest.raises(MemberCountMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2)
+        deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_path_mismatch():
@@ -396,7 +396,7 @@ def test_deep_compare_async_groups_path_mismatch():
     mock_group2.create_group("subgroup_different")
 
     with pytest.raises(PathMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2)
+        deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_array_shape_mismatch():
@@ -406,7 +406,7 @@ def test_deep_compare_async_groups_array_shape_mismatch():
     arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(ArrayShapeMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2)
+        deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_array_shape_match():
@@ -418,7 +418,7 @@ def test_deep_compare_async_groups_array_shape_match():
     arr1[:] = np.zeros(4)
     arr2[:] = np.zeros(4)
 
-    deep_compare_async_groups(mock_group1, mock_group2)
+    deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_array_value_mismatch():
@@ -430,9 +430,9 @@ def test_deep_compare_async_groups_array_value_mismatch():
     arr1[:] = np.zeros(4)
     arr2[:] = np.ones(4)
 
-    deep_compare_async_groups(mock_group1, mock_group2, compare_values=False)
+    deep_compare_groups(mock_group1, mock_group2, compare_values=False)
     with pytest.raises(ArrayValueMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2, compare_values=True)
+        deep_compare_groups(mock_group1, mock_group2, compare_values=True)
 
 
 def test_deep_compare_async_groups_root_name_mismatch():
@@ -444,7 +444,7 @@ def test_deep_compare_async_groups_root_name_mismatch():
     sg2 = mock_group2.create_group("subgroup2")
     ssg2 = sg2.create_group("grandchild")
     with pytest.raises(PathMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2)
+        deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_same_tree():
@@ -455,7 +455,7 @@ def test_deep_compare_async_groups_same_tree():
 
     sg2 = mock_group2.create_group("subgroup1")
     ssg2 = sg2.create_group("grandchild")
-    deep_compare_async_groups(mock_group1, mock_group2)
+    deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_async_groups_attribute_mismatch():
@@ -464,13 +464,13 @@ def test_deep_compare_async_groups_attribute_mismatch():
 
     mock_group1.attrs["attr1"] = "value1"
     mock_group2.attrs["attr1"] = "value1"
-    deep_compare_async_groups(mock_group1, mock_group2, compare_attributes=True)
+    deep_compare_groups(mock_group1, mock_group2, compare_attributes=True)
 
     mock_group2.attrs["attr1"] = "value2"
-    deep_compare_async_groups(mock_group1, mock_group2, compare_attributes=False)
+    deep_compare_groups(mock_group1, mock_group2, compare_attributes=False)
 
     with pytest.raises(AttributeMismatchError):
-        deep_compare_async_groups(mock_group1, mock_group2, compare_attributes=True)
+        deep_compare_groups(mock_group1, mock_group2, compare_attributes=True)
 
 
 def test_deep_compare_async_groups_array_and_group():
@@ -480,9 +480,9 @@ def test_deep_compare_async_groups_array_and_group():
     arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(GroupComparisonError):
-        deep_compare_async_groups(mock_group1, mock_group2)
+        deep_compare_groups(mock_group1, mock_group2)
 
 
 def test_deep_compare_notgroups():
     with pytest.raises(TypeError):
-        deep_compare_async_groups({}, {})  # type: ignore
+        deep_compare_groups({}, {})  # type: ignore

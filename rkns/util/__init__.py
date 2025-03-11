@@ -16,6 +16,7 @@ from .zarr_util import (
     add_child_array,
     copy_attributes,
     copy_group_recursive,
+    deep_compare_groups,
     get_or_create_target_store,
 )
 
@@ -34,4 +35,5 @@ __all__ = [
     "apply_check_open_to_all_methods",
     "TreeRepr",
     "group_tree_with_attrs_async",
+    "deep_compare_groups",
 ]

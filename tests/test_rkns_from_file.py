@@ -7,6 +7,7 @@ import pytest
 import zarr
 
 from rkns.rkns import RKNS
+from rkns.util import deep_compare_groups
 
 paths = ["tests/files/test.edf"]
 # paths = ["data_shhs1/shhs1-200001.edf"]
@@ -37,21 +38,10 @@ def test_export_filesystem(path, suffix):
         tempfile.TemporaryDirectory() as tmpdir,
     ):
         temp_file1 = Path(tmpdir) / f"file1{suffix}"
-        # temp_file2 = Path(tmpdir) / "file2.rkns.zip"
-
         rkns_obj1 = RKNS.from_file(path, populate_from_raw=True)
-        # rkns_obj1.populate_rkns_from_raw()
-
-        # rkns_obj2 = RKNS.from_file(path, populate_from_raw=True)
-
         rkns_obj1.export(Path(temp_file1))
-        # rkns_obj2.export(Path(temp_file2))
-
         reloaded1 = RKNS.from_file(temp_file1)
-
-        tree1 = reloaded1._root.tree()
-        tree2 = rkns_obj1._root.tree()
-        assert str(tree1) == str(tree2)
+        assert reloaded1.is_equal_to(rkns_obj1)
 
 
 @pytest.mark.parametrize(
