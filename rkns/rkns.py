@@ -5,13 +5,16 @@ import warnings
 from hashlib import md5
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING, Any, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional, cast
 
 import numpy as np
 import zarr
 import zarr.codecs as codecs
+import zarr.core
+import zarr.core.common
 import zarr.errors
 import zarr.storage
+from numpy.typing import ArrayLike
 
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
@@ -50,21 +53,63 @@ class RKNS:
 
     def __init__(self, store: zarr.storage.StoreLike) -> None:
         self.store = store
-        self.__root = None
-        self.__raw = None
+        self.__root: zarr.Group | None = None
+        self.__raw: zarr.Group | None = None
         self._is_closed = False
 
         self.adapter = AdapterRegistry.get_adapter(
             file_format=self.get_fileformat_raw_signal()
         )
 
-    @staticmethod
-    def _make_rkns_header() -> dict[str, str]:
-        """Generate header for RKNS file. This should contain information relevant for the
-        compatibility between different RKNS versions.
-        It must be a JSON-serializable dict."""
+    @property
+    def patient_info(self) -> zarr.core.common.JSON:
+        return self._rkns.attrs["patient_info"]
 
-        return {"rkns_version": __version__, "rkns_implementation": "python"}
+    @property
+    def admin_info(self) -> zarr.core.common.JSON:
+        return self._rkns.attrs["admin_info"]
+
+    @property
+    def channel_info(self) -> zarr.core.common.JSON:
+        return self._rkns.attrs["channel_info"]
+
+    def get_channel_names(self) -> Iterable[str]:
+        return self.channel_info.keys()  # type: ignore
+
+    def get_frequencygroup_of_channel(self, channel_name: str) -> str:
+        return self.channel_info[channel_name]["frequency_group"]  # type: ignore
+
+    def get_frequency_of_channel(self, channel_name: str) -> float:
+        return self.channel_info[channel_name]["frequency_group"]  # type: ignore
+
+    def get_channel_frequencies(self) -> list[float]:
+        return self.channel_info.keys()  # type: ignore
+
+    def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
+
+    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
+        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal_minmaxs.value]  # type: ignore
+
+    def get_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+        digital_signal = self._get_digital_signal_by_fg(frequency_group=frequency_group)
+        pminmax_dminmax = self._pminmax_dminmax_by_fg(frequency_group=frequency_group)
+
+        # NOTE: Important to cast here: Number might and probably is twice as large as np.int16
+        pmin = pminmax_dminmax[[0]].astype(np.int32)
+        pmax = pminmax_dminmax[[1]].astype(np.int32)
+        dmin = pminmax_dminmax[[2]].astype(np.int32)
+        dmax = pminmax_dminmax[[3]].astype(np.int32)
+        m = (pmax - pmin) / (dmax - dmin)
+        bias = pmax / m - dmax
+        return m * (digital_signal + bias)
+
+    def get_frequency_group_names(self) -> list[str]:
+        return [
+            key
+            for key in self._rkns.keys()
+            if key.startswith(RKNSNodeNames.frequency_group_prefix.value)
+        ]
 
     def is_equal_to(
         self,
@@ -205,6 +250,14 @@ class RKNS:
                 self._root._async_group, max_depth=max_depth, show_attrs=show_attrs
             )
         )
+
+    @staticmethod
+    def _make_rkns_header() -> dict[str, str]:
+        """Generate header for RKNS file. This should contain information relevant for the
+        compatibility between different RKNS versions.
+        It must be a JSON-serializable dict."""
+
+        return {"rkns_version": __version__, "rkns_implementation": "python"}
 
     @property
     def _root(self) -> zarr.Group:

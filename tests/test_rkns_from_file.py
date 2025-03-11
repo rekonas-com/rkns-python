@@ -3,6 +3,8 @@ import os
 import tempfile
 from pathlib import Path
 
+import numpy as np
+import pyedflib
 import pytest
 import zarr
 
@@ -20,9 +22,47 @@ def get_file_md5(path: str | Path) -> str:
 
 
 @pytest.mark.parametrize("path", paths)
-def test_populate_rkns_from_raw_edf(path):
+def test_rkns_from_edf_properties(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=True)
     check_validity(rkns_obj._root)
+
+    with pyedflib.EdfReader(path) as pyedf:
+        assert pyedf.getBirthdate() == rkns_obj.patient_info["birthdate"]  # type: ignore
+        assert pyedf.getSex() == rkns_obj.patient_info["sex"]  # type: ignore
+        # assert pyedf.getSampleFrequencies() == rkns_obj.patientinfo["sex"]  # type: ignore
+        pminmax_dminmax = rkns_obj._pminmax_dminmax_by_fg(
+            frequency_group=rkns_obj.get_frequency_group_names()[0]
+        )
+        np.testing.assert_allclose(pyedf.getPhysicalMinimum(), pminmax_dminmax[0])
+        np.testing.assert_allclose(pyedf.getPhysicalMaximum(), pminmax_dminmax[1])
+        np.testing.assert_allclose(pyedf.getDigitalMinimum(), pminmax_dminmax[2])
+        np.testing.assert_allclose(pyedf.getDigitalMaximum(), pminmax_dminmax[3])
+
+
+@pytest.mark.parametrize("path", paths)
+def test_rkns_from_edf_signals(path):
+    rkns_obj = RKNS.from_file(path, populate_from_raw=True)
+    check_validity(rkns_obj._root)
+    with pyedflib.EdfReader(path) as pyedf:
+        pmin = pyedf.getPhysicalMinimum()[:, np.newaxis]
+        pmax = pyedf.getPhysicalMaximum()[:, np.newaxis]
+        dmin = pyedf.getDigitalMinimum()[:, np.newaxis]
+        dmax = pyedf.getDigitalMaximum()[:, np.newaxis]
+
+    channel_data_dig, signal_headers, header = pyedflib.highlevel.read_edf(
+        path, digital=True
+    )  # type: ignore
+    fg = rkns_obj.get_frequency_group_names()[0]
+    np.testing.assert_allclose(
+        np.array(channel_data_dig).T, rkns_obj._get_digital_signal_by_fg(fg)
+    )
+
+    channel_data_phys = pyedflib.highlevel.dig2phys(
+        channel_data_dig, pmax=pmax, pmin=pmin, dmin=dmin, dmax=dmax
+    )
+    phys_rkns = rkns_obj.get_signal_by_fg(fg)
+    np.testing.assert_allclose(phys_rkns, channel_data_phys.T)
+    # rkns_obj._get_digital_signal_by_fg()
 
 
 @pytest.mark.parametrize(
