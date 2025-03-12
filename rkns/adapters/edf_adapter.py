@@ -85,14 +85,16 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         overwrite_if_exists: bool = False,
         validate: bool = True,
     ) -> zarr.Group:
-        rkns_node = cls.create_rkns_group(root_node, overwrite_if_exists)
-        rsignal_node = raw_node[RKNSNodeNames.raw_signal.value]
+        rkns_signals_node, _ = cls.create_rkns_group_structure(
+            root_node, overwrite_if_exists
+        )
+        raw_signal_node = raw_node[RKNSNodeNames.raw_signal.value]
 
         # TODO: This is just a hacky workaround to use the existing library.
         # We probably need our custom parser..
         # dump the byte content into a named temporary file and provide the path to pyedflib.
         with tempfile.NamedTemporaryFile(delete=True) as temp_file:
-            temp_file.write(rsignal_node[:].tobytes())  # type: ignore
+            temp_file.write(raw_signal_node[:].tobytes())  # type: ignore
 
             filepath = temp_file.name
             channel_data, signal_headers, header = pyedflib.highlevel.read_edf(
@@ -104,10 +106,10 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         fg_arrays, fg_attributes, rkns_attributes = cls.extract_data(
             channel_data, signal_headers, header, validate=validate
         )
-        rkns_node.update_attributes(rkns_attributes)
+        rkns_signals_node.update_attributes(rkns_attributes)
 
         for fg in fg_arrays.keys():
-            fg_node = rkns_node.create_group(fg)
+            fg_node = rkns_signals_node.create_group(fg)
             fg_node.update_attributes(fg_attributes[fg])
             add_child_array(
                 parent_node=fg_node,
@@ -122,7 +124,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
                 attributes={"rows": "channels", "columns": minmax_array_columnorder},
             )
 
-        return rkns_node
+        return rkns_signals_node
 
     @classmethod
     def extract_data(cls, channel_data, signal_headers, header, validate: bool = True):

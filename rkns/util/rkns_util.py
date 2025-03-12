@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from logging import root
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import zarr
@@ -14,6 +14,8 @@ class RKNSNodeNames(str, Enum):
     # https://stackoverflow.com/questions/58608361/string-based-enum-in-python
     raw_root = "_raw"
     rkns_root = "rkns"
+    rkns_signals_group = "signals"
+    rkns_annotations_group = "annotations"
     frequency_group_prefix = "fg_"
     view = "view"
     history = "history"
@@ -66,9 +68,30 @@ def check_rkns_validity(rkns_node: zarr.Group | Any) -> None:
             f"The RKNS node basename must be '{RKNSNodeNames.rkns_root.value}', but found '{rkns_node.basename}'"
         )
 
-    for name, subgroup in rkns_node.groups():
-        # groups starting with fg_ must be frequency groups containing signal and minmax scale
-        if subgroup.basename.startswith(RKNSNodeNames.frequency_group_prefix.value):
+    # Check that the signals and annotations groups exist.
+    expected_children = [
+        f"/{RKNSNodeNames.rkns_signals_group.value}",
+        f"/{RKNSNodeNames.rkns_annotations_group.value}",
+    ]
+    for expected_group in expected_children:
+        if expected_group not in rkns_node:
+            raise ValueError(f"Missing {expected_group=}. Invalid Format.")
+        elif not isinstance(rkns_node[expected_group], zarr.Group):
+            raise TypeError(
+                f"Expected {expected_group} to be a zarr.Group, but it is {type(rkns_node[expected_group])}."
+            )
+
+    # check that all child groups of the /rkns/signals group start with "fg_"
+    # If they do, check that they fg_ groups contain the "signal" and "signal_minmax" arrays.
+    rkns_signals_group = cast(
+        zarr.Group, rkns_node[RKNSNodeNames.rkns_signals_group.value]
+    )
+    for name, subgroup in rkns_signals_group.groups():
+        if not subgroup.basename.startswith(RKNSNodeNames.frequency_group_prefix.value):
+            raise ValueError(
+                f"Group '{subgroup.name}' does not have the prefix {RKNSNodeNames.frequency_group_prefix.value}"
+            )
+        else:
             if RKNSNodeNames.rkns_signal.value not in subgroup:
                 raise ValueError(
                     f"Frequency group '{subgroup.basename}' is missing required '{RKNSNodeNames.rkns_signal.value}' array"
