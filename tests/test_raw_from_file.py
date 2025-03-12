@@ -9,7 +9,7 @@ import zarr
 from rkns.rkns import RKNS
 from rkns.util import RKNSNodeNames
 
-paths = ["tests/files/test.edf"]
+paths = ["tests/files/test_file.edf"]
 
 
 def get_file_md5(path: str | Path) -> str:

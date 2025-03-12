@@ -11,7 +11,7 @@ import zarr
 from rkns.rkns import RKNS
 from rkns.util import check_validity, deep_compare_groups
 
-paths = ["tests/files/test.edf"]
+paths = ["tests/files/test_file.edf"]
 # paths = ["data_shhs1/shhs1-200001.edf"]
 
 
@@ -25,6 +25,8 @@ def get_file_md5(path: str | Path) -> str:
 def test_rkns_from_edf_properties(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=True)
     check_validity(rkns_obj._root)
+
+    fg_names = rkns_obj.get_frequency_group_names()
 
     with pyedflib.EdfReader(path) as pyedf:
         assert pyedf.getBirthdate() == rkns_obj.patient_info["birthdate"]  # type: ignore
