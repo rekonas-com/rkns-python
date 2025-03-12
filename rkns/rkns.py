@@ -14,7 +14,6 @@ import zarr.core
 import zarr.core.common
 import zarr.errors
 import zarr.storage
-from numpy.typing import ArrayLike
 
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
@@ -26,6 +25,7 @@ from rkns.util import (
     check_validity,
     copy_attributes,
     copy_group_recursive,
+    get_freq_group,
     get_or_create_target_store,
     group_tree_with_attrs_async,
 )
@@ -55,6 +55,7 @@ class RKNS:
         self.store = store
         self.__root: zarr.Group | None = None
         self.__raw: zarr.Group | None = None
+        self.__rkns: zarr.Group | None = None
         self._is_closed = False
 
         self.adapter = AdapterRegistry.get_adapter(
@@ -76,22 +77,14 @@ class RKNS:
     def get_channel_names(self) -> Iterable[str]:
         return self.channel_info.keys()  # type: ignore
 
-    def get_frequencygroup_of_channel(self, channel_name: str) -> str:
-        return self.channel_info[channel_name]["frequency_group"]  # type: ignore
+    def get_frequency_by_channel(self, channel_name: str) -> float:
+        fg = self._get_frequencygroup(channel_name)
+        return self._rkns[fg].attrs["sample_frequency_HZ"]  # type: ignore
 
-    def get_frequency_of_channel(self, channel_name: str) -> float:
-        return self.channel_info[channel_name]["frequency_group"]  # type: ignore
+    def get_signal_by_freq(self, frequency: float) -> np.ndarray:
+        return self._get_signal_by_fg(get_freq_group(frequency))
 
-    def get_channel_frequencies(self) -> list[float]:
-        return self.channel_info.keys()  # type: ignore
-
-    def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
-        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
-
-    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
-        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal_minmaxs.value]  # type: ignore
-
-    def get_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _get_signal_by_fg(self, frequency_group: str) -> np.ndarray:
         digital_signal = self._get_digital_signal_by_fg(frequency_group=frequency_group)
         pminmax_dminmax = self._pminmax_dminmax_by_fg(frequency_group=frequency_group)
 
@@ -104,12 +97,23 @@ class RKNS:
         bias = pmax / m - dmax
         return m * (digital_signal + bias)
 
-    def get_frequency_group_names(self) -> list[str]:
-        return [
-            key
-            for key in self._rkns.keys()
-            if key.startswith(RKNSNodeNames.frequency_group_prefix.value)
-        ]
+    def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
+
+    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
+        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal_minmaxs.value]  # type: ignore
+
+    def _get_frequencygroup(self, channel_name: str) -> str:
+        # attributes of the /rkns contain the mapping from channel_name to frequency_group
+        return self.channel_info[channel_name]["frequency_group"]  # type: ignore
+
+    def _get_frequencygroups(self) -> list[str]:
+        fg_list: list[str] = []
+
+        for key in self._rkns.keys():
+            if key.startswith(RKNSNodeNames.frequency_group_prefix.value):
+                fg_list.append(key)
+        return fg_list
 
     def is_equal_to(
         self,
@@ -200,7 +204,7 @@ class RKNS:
     def populate_rkns_from_raw(
         self, overwrite_if_exists: bool = False, validate: bool = True
     ) -> Self:
-        self.__rkns = self.adapter.populate_rkns_from_raw(
+        self.adapter.populate_rkns_from_raw(
             raw_node=self._raw,
             root_node=self._root,
             overwrite_if_exists=overwrite_if_exists,
@@ -279,7 +283,7 @@ class RKNS:
     def _rkns(self) -> zarr.Group:
         if self.__rkns is None:
             self.__rkns = zarr.open_group(
-                self.store, path=RKNSNodeNames.raw_root.value, mode="r+"
+                self.store, path=RKNSNodeNames.rkns_root.value, mode="r+"
             )
         return self.__rkns
 
