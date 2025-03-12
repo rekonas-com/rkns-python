@@ -74,12 +74,15 @@ class RKNS:
     def channel_info(self) -> zarr.core.common.JSON:
         return self._rkns.attrs["channel_info"]
 
-    def get_channel_names(self) -> Iterable[str]:
-        return self.channel_info.keys()  # type: ignore
+    def get_channel_names(self) -> list[str]:
+        return [k for k in self.channel_info.keys()]  # type: ignore
+
+    def _get_channel_names_by_fg(self, frequency_group: str) -> list[str]:
+        return self._signals[frequency_group].attrs["channels"]  # type: ignore
 
     def get_frequency_by_channel(self, channel_name: str) -> float:
         fg = self._get_frequencygroup(channel_name)
-        return self._rkns[fg].attrs["sample_frequency_HZ"]  # type: ignore
+        return self._signals[fg].attrs["sample_frequency_HZ"]  # type: ignore
 
     def get_signal_by_freq(self, frequency: float) -> np.ndarray:
         return self._get_signal_by_fg(get_freq_group(frequency))
@@ -89,31 +92,26 @@ class RKNS:
         pminmax_dminmax = self._pminmax_dminmax_by_fg(frequency_group=frequency_group)
 
         # NOTE: Important to cast here: Number might and probably is twice as large as np.int16
-        pmin = pminmax_dminmax[[0]].astype(np.int32)
-        pmax = pminmax_dminmax[[1]].astype(np.int32)
-        dmin = pminmax_dminmax[[2]].astype(np.int32)
-        dmax = pminmax_dminmax[[3]].astype(np.int32)
+        pmin = pminmax_dminmax[[0]]
+        pmax = pminmax_dminmax[[1]]
+        dmin = pminmax_dminmax[[2]]
+        dmax = pminmax_dminmax[[3]]
         m = (pmax - pmin) / (dmax - dmin)
         bias = pmax / m - dmax
         return m * (digital_signal + bias)
 
     def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
-        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
+        return self._signals[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
 
     def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
-        return self._rkns[frequency_group][RKNSNodeNames.rkns_signal_minmaxs.value]  # type: ignore
+        return self._signals[frequency_group][RKNSNodeNames.rkns_signal_minmaxs.value]  # type: ignore
 
     def _get_frequencygroup(self, channel_name: str) -> str:
         # attributes of the /rkns contain the mapping from channel_name to frequency_group
         return self.channel_info[channel_name]["frequency_group"]  # type: ignore
 
     def _get_frequencygroups(self) -> list[str]:
-        fg_list: list[str] = []
-
-        for key in self._rkns.keys():
-            if key.startswith(RKNSNodeNames.frequency_group_prefix.value):
-                fg_list.append(key)
-        return fg_list
+        return [k for k in self._signals.keys()]
 
     def is_equal_to(
         self,
@@ -286,6 +284,11 @@ class RKNS:
                 self.store, path=RKNSNodeNames.rkns_root.value, mode="r+"
             )
         return self.__rkns
+
+    @property
+    def _signals(self) -> zarr.Group:
+        rkns_signal = RKNSNodeNames.rkns_signals_group.value
+        return cast(zarr.Group, self._rkns[rkns_signal])
 
 
 class RKNSBuilder:

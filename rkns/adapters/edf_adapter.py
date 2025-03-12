@@ -12,7 +12,7 @@ import zarr.codecs as codecs
 import zarr.errors
 
 from rkns.adapters.base import RKNSBaseAdapter
-from rkns.util import RKNSNodeNames, add_child_array
+from rkns.util import RKNSNodeNames, add_child_array, get_freq_group
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -68,8 +68,9 @@ def add_frequency_groups_to_headers(signal_headers: list[dict[str, Any]]) -> Non
     # loop through the pyedf signal headers and pre-compute the frequency groups
     # based on the sample frequency
     for i in range(len(signal_headers)):
-        rounded_frequency = np.round(signal_headers[i]["sample_frequency"], 1)
-        signal_headers[i]["frequency_group"] = f"fg_{rounded_frequency}"
+        signal_headers[i]["frequency_group"] = get_freq_group(
+            signal_headers[i]["sample_frequency"]
+        )
 
 
 class RKNSEdfAdapter(RKNSBaseAdapter):
@@ -85,7 +86,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         overwrite_if_exists: bool = False,
         validate: bool = True,
     ) -> zarr.Group:
-        rkns_signals_node, _ = cls.create_rkns_group_structure(
+        _rkns, rkns_signals_node, _ = cls.create_rkns_group_structure(
             root_node, overwrite_if_exists
         )
         raw_signal_node = raw_node[RKNSNodeNames.raw_signal.value]
@@ -106,7 +107,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         fg_arrays, fg_attributes, rkns_attributes = cls.extract_data(
             channel_data, signal_headers, header, validate=validate
         )
-        rkns_signals_node.update_attributes(rkns_attributes)
+        _rkns.update_attributes(rkns_attributes)
 
         for fg in fg_arrays.keys():
             fg_node = rkns_signals_node.create_group(fg)
@@ -150,6 +151,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         # a.) group data by frequency
         # b.) remember which channel label maps to which frequency group
         # c.) collect metadata that should belong into frequency groups.
+
         for idx, s_header in enumerate(signal_headers):
             fg = s_header["frequency_group"]
             channel = s_header["label"]
@@ -162,9 +164,8 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
                 s_header[pyedf_key] for pyedf_key in minmax_array_columnorder
             ]
             fg_arraylist[fg]["signal_minmaxs"].append(
-                np.array(p_minmax_d_minmax, dtype=np.int16)
+                np.array(p_minmax_d_minmax, dtype=np.float64)
             )
-
             # build attributes that are per frequency group
             for pyedf_key, rkns_attribute_name in frequency_group_attributes.items():
                 fg_attributes[fg][rkns_attribute_name].append(s_header[pyedf_key])
@@ -173,10 +174,13 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             # build attributes that are per channel, and will be stored as a dict/JSON in /rkns/
             for pyedf_key, rkns_attribute_name in channel_wise_attribute_text.items():
                 channel_to_attribute[channel][rkns_attribute_name] = s_header[pyedf_key]
-
         for fg in fg_arraylist.keys():
-            for key in fg_arraylist[fg].keys():
-                fg_arrays[fg][key] = np.stack(fg_arraylist[fg][key], 1, dtype=np.int16)
+            fg_arrays[fg]["signal"] = np.stack(
+                fg_arraylist[fg]["signal"], 1, dtype=np.int16
+            )
+            fg_arrays[fg]["signal_minmaxs"] = np.stack(
+                fg_arraylist[fg]["signal_minmaxs"], 1, dtype=np.float64
+            )
 
         header["recording_duration_in_s"] = (
             len(channel_data[0]) / signal_headers[0]["sample_frequency"]
@@ -196,7 +200,6 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             if isinstance(attr, datetime):
                 attr = attr.isoformat()
             rkns_attributes["admin_info"][rkns_attribute_name] = attr
-
         rkns_attributes["channel_info"] = dict(channel_to_attribute)
         return fg_arrays, fg_attributes, rkns_attributes
 

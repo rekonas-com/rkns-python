@@ -38,7 +38,7 @@ def pyedf_digital(request):
 
 
 @pytest.fixture(params=paths)
-def pyedf_pysical(request):
+def pyedf_physical(request):
     """
     Fixture for the pyedf output for each path (returning the physical values)
     """
@@ -65,7 +65,6 @@ def test_validity(path, rkns_obj):
 ########### Getter Functions #########
 @pytest.mark.parametrize("path", paths)
 def test_frequency_groups(path, rkns_obj, pyedf_digital):
-    breakpoint()
     fg_names = rkns_obj._get_frequencygroups()
     channel_data_dig, signal_headers, header = pyedf_digital
     reference_fgs = {f"fg_{np.round(s['sample_frequency'], 1)}" for s in signal_headers}
@@ -115,43 +114,80 @@ def test_frequency_by_channel(path, rkns_obj, pyedf_digital):
 @pytest.mark.parametrize("path", paths)
 def test_rkns_from_edf_properties(path, rkns_obj, pyedf_digital):
     channel_data_dig, signal_headers, header = pyedf_digital
+    reference_fgs = {
+        s["label"]: f"fg_{np.round(s['sample_frequency'], 1)}" for s in signal_headers
+    }
 
     fg_names = rkns_obj._get_frequencygroups()
     with pyedflib.EdfReader(path) as pyedf:
         assert pyedf.getBirthdate() == rkns_obj.patient_info["birthdate"]  # type: ignore
         assert pyedf.getSex() == rkns_obj.patient_info["sex"]  # type: ignore
-        # assert pyedf.getSampleFrequencies() == rkns_obj.patientinfo["sex"]  # type: ignore
-        pminmax_dminmax = rkns_obj._pminmax_dminmax_by_fg(
-            frequency_group=rkns_obj._get_frequencygroup()[0]
-        )
-        np.testing.assert_allclose(pyedf.getPhysicalMinimum(), pminmax_dminmax[0])
-        np.testing.assert_allclose(pyedf.getPhysicalMaximum(), pminmax_dminmax[1])
-        np.testing.assert_allclose(pyedf.getDigitalMinimum(), pminmax_dminmax[2])
-        np.testing.assert_allclose(pyedf.getDigitalMaximum(), pminmax_dminmax[3])
 
 
 @pytest.mark.parametrize("path", paths)
-def test_rkns_from_edf_signals(path, rkns_obj):
-    with pyedflib.EdfReader(path) as pyedf:
-        pmin = pyedf.getPhysicalMinimum()[:, np.newaxis]
-        pmax = pyedf.getPhysicalMaximum()[:, np.newaxis]
-        dmin = pyedf.getDigitalMinimum()[:, np.newaxis]
-        dmax = pyedf.getDigitalMaximum()[:, np.newaxis]
+def test_rkns_from_edf_minmax(path, rkns_obj, pyedf_digital):
+    channel_data_dig, signal_headers, header = pyedf_digital
 
-    channel_data_dig, signal_headers, header = pyedflib.highlevel.read_edf(
-        path, digital=True
-    )  # type: ignore
-    fg = rkns_obj._get_frequencygroups()[0]
-    np.testing.assert_allclose(
-        np.array(channel_data_dig).T, rkns_obj._get_digital_signal_by_fg(fg)
-    )
+    reference_fgs = dict()
+    for s in signal_headers:
+        channel_name = s["label"]
+        fg = f"fg_{np.round(s['sample_frequency'], 1)}"
+        ref_pminmax_dminmax = (
+            s["physical_min"],
+            s["physical_max"],
+            s["digital_min"],
+            s["digital_max"],
+        )
+        reference_fgs[channel_name] = np.array(ref_pminmax_dminmax)
 
-    channel_data_phys = pyedflib.highlevel.dig2phys(
-        channel_data_dig, pmax=pmax, pmin=pmin, dmin=dmin, dmax=dmax
-    )
-    phys_rkns = rkns_obj.get_signal_by_fg(fg)
-    np.testing.assert_allclose(phys_rkns, channel_data_phys.T)
-    # rkns_obj._get_digital_signal_by_fg()
+    fgs = rkns_obj._get_frequencygroups()
+    for fg in fgs:
+        channel_names = rkns_obj._get_channel_names_by_fg(fg)
+        rkns_pminmax_dminmax = rkns_obj._pminmax_dminmax_by_fg(fg)
+        for i, channel_name in enumerate(channel_names):
+            val1 = reference_fgs[channel_name]
+            val2 = rkns_pminmax_dminmax[:].T[i]
+            np.testing.assert_allclose(val1, val2)
+
+
+@pytest.mark.parametrize("path", paths)
+def test_rkns_from_edf_digital(path, rkns_obj, pyedf_digital):
+    channel_data_dig, signal_headers, header = pyedf_digital
+
+    reference_fgs = dict()
+    for s, data in zip(signal_headers, channel_data_dig):
+        channel_name = s["label"]
+        fg = f"fg_{np.round(s['sample_frequency'], 1)}"
+        reference_fgs[channel_name] = np.array(data)
+
+    fgs = rkns_obj._get_frequencygroups()
+    for fg in fgs:
+        channel_names = rkns_obj._get_channel_names_by_fg(fg)
+        rkns_digital_signal = rkns_obj._get_digital_signal_by_fg(fg)
+        for i, channel_name in enumerate(channel_names):
+            val1 = reference_fgs[channel_name]
+            val2 = rkns_digital_signal[:].T[i]
+            np.testing.assert_allclose(val1, val2)
+
+
+@pytest.mark.parametrize("path", paths)
+def test_rkns_from_edf_physical(path, rkns_obj, pyedf_physical):
+    channel_data_dig, signal_headers, header = pyedf_physical
+
+    reference_fgs = dict()
+    for s, data in zip(signal_headers, channel_data_dig):
+        channel_name = s["label"]
+        fg = f"fg_{np.round(s['sample_frequency'], 1)}"
+        reference_fgs[channel_name] = np.array(data)
+
+    fgs = rkns_obj._get_frequencygroups()
+    for fg in fgs:
+        channel_names = rkns_obj._get_channel_names_by_fg(fg)
+        rkns_physical_signal = rkns_obj._get_signal_by_fg(fg)
+        for i, channel_name in enumerate(channel_names):
+            val1 = reference_fgs[channel_name]
+            val2 = rkns_physical_signal[:].T[i]
+            np.testing.assert_allclose(val1, val2)
 
 
 @pytest.mark.parametrize(

@@ -39,7 +39,7 @@ class RKNSBaseAdapter(ABC):
     @classmethod
     def create_rkns_group_structure(
         cls, root_node: zarr.Group, overwrite_if_exists: bool
-    ) -> tuple[zarr.Group, zarr.Group]:
+    ) -> tuple[zarr.Group, zarr.Group, zarr.Group]:
         _rkns_name = RKNSNodeNames.rkns_root.value
         _rkns_signals_name = RKNSNodeNames.rkns_signals_group.value
         _rkns_annotations_name = RKNSNodeNames.rkns_annotations_group.value
@@ -74,6 +74,7 @@ class RKNSBaseAdapter(ABC):
         # we only created groups, so we can cast properly..
         # _rkns_signals_node = cast(Iterator[tuple[str, zarr.Group]], _rkns_signals_node)
         return (
+            cast(zarr.Group, node_dict[f"{_rkns_name}"]),
             cast(zarr.Group, node_dict[f"{_rkns_name}/{_rkns_signals_name}"]),
             cast(zarr.Group, node_dict[f"{_rkns_name}/{_rkns_annotations_name}"]),
         )

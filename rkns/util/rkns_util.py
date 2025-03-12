@@ -132,3 +132,8 @@ def check_raw_validity(_raw_node: zarr.Group | Any) -> None:
         raise TypeError(
             f"Expected Array of dtype np.byte, but got {type(_raw_signal)}."
         )
+
+
+def get_freq_group(freq_in_Hz: float) -> str:
+    prefix = RKNSNodeNames.frequency_group_prefix.value
+    return f"{prefix}{np.round(freq_in_Hz, 1)}"
