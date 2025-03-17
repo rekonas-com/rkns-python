@@ -112,7 +112,7 @@ def test_frequency_by_channel(path, rkns_obj, pyedf_digital):
 
 
 @pytest.mark.parametrize("path", paths)
-def test_rkns_from_edf_properties(path, rkns_obj, pyedf_digital):
+def test_rkns_from_edf_attributes(path, rkns_obj, pyedf_digital):
     channel_data_dig, signal_headers, header = pyedf_digital
     reference_fgs = {
         s["label"]: f"fg_{np.round(s['sample_frequency'], 1)}" for s in signal_headers
@@ -122,6 +122,7 @@ def test_rkns_from_edf_properties(path, rkns_obj, pyedf_digital):
     with pyedflib.EdfReader(path) as pyedf:
         assert pyedf.getBirthdate() == rkns_obj.patient_info["birthdate"]  # type: ignore
         assert pyedf.getSex() == rkns_obj.patient_info["sex"]  # type: ignore
+        assert pyedf.getFileDuration() == rkns_obj.get_duration()
 
 
 @pytest.mark.parametrize("path", paths)

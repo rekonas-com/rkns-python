@@ -459,7 +459,7 @@ class RKNSBuilder:
     ):
         # TODO this simply loads the whole chunk into memory.
         # this should be doable in a more elegant manner using (variable) chunks
-        byte_array = np.fromfile(file_path, dtype=np.uint8)
+        byte_array = np.fromfile(file_path, dtype=np.byte)
 
         # TODO: Decide on codec here.
         compressors = codecs.ZstdCodec(level=3)
@@ -474,7 +474,7 @@ class RKNSBuilder:
         _raw_signal.attrs["filename"] = file_path.name
         _raw_signal.attrs["format"] = file_format.value
         stat = file_path.stat()
-        _raw_signal.attrs["modification_time"] = stat.st_mtime
+        _raw_signal.attrs["st_mtime"] = stat.st_mtime
         _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
     @classmethod

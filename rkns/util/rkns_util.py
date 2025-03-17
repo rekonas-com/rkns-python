@@ -123,7 +123,7 @@ def check_raw_validity(_raw_node: zarr.Group | Any) -> None:
             raise ValueError(f"Missing {expected_group=}. Invalid Format.")
 
     _raw_signal = _raw_node[RKNSNodeNames.raw_signal.value]
-    expected_raw_signal_attributes = ["filename", "format", "modification_time", "md5"]
+    expected_raw_signal_attributes = ["filename", "format", "st_mtime", "md5"]
     for attribute in expected_raw_signal_attributes:
         if attribute not in _raw_signal.attrs:
             raise ValueError(f"Missing required raw signal attribute: {attribute}")
