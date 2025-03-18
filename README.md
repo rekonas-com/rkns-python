@@ -22,8 +22,9 @@ Rather than creating just another rigid standard, RKNS serves as a universal ada
 - **Future-Proof**: Hierarchical structure allows for extensions without breaking backward compatibility
 
 # Install from GitHub (development version)
-pip install git+https://github.com/rekonas-com/rkns-python
+```pip install git+https://github.com/rekonas-com/rkns-python```
 
 
-# Contributing
+# Contributing & Developer Environment.
 Contributions are welcome! Please see CONTRIBUTING.md for details on how to contribute to this project.
+We rely on devcontainers for a reproducible development environment.
