@@ -1,4 +1,5 @@
-# RKNS - Electrophysiological Data Format
+# RKNS
+## An "Adapter" Format for medical time-series (EEG, ECG, ...)
 
 > **Note**: RKNS is still in early development and not yet ready for production use. APIs may change frequently.
 
