@@ -38,4 +38,6 @@ __all__ = [
     "TreeRepr",
     "group_tree_with_attrs_async",
     "deep_compare_groups",
+    "check_validity",
+    "get_freq_group",
 ]

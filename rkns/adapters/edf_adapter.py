@@ -169,7 +169,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             # build attributes that are per frequency group
             for pyedf_key, rkns_attribute_name in frequency_group_attributes.items():
                 fg_attributes[fg][rkns_attribute_name].append(s_header[pyedf_key])
-            fg_attributes[fg]["sample_frequency_HZ"] = s_header["sample_frequency"]
+            fg_attributes[fg]["sfreq_Hz"] = s_header["sample_frequency"]
 
             # build attributes that are per channel, and will be stored as a dict/JSON in /rkns/
             for pyedf_key, rkns_attribute_name in channel_wise_attribute_text.items():

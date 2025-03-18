@@ -5,18 +5,16 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Iterable,
     Literal,
     Optional,
-    Sequence,
     cast,
 )
 
 import numpy as np
 import zarr
 import zarr.storage
-from zarr import Array, AsyncArray, AsyncGroup, Group
+from zarr import Array, Group
 from zarr.abc.store import Store
 from zarr.core.attributes import Attributes
 

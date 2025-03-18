@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from logging import root
 from typing import Any, cast
 
 import numpy as np

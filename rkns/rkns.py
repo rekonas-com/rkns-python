@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import datetime
 import logging
 import warnings
 from hashlib import md5
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 import numpy as np
 import zarr
@@ -23,7 +24,6 @@ from rkns.util import (
     RKNSParseError,
     apply_check_open_to_all_methods,
     check_validity,
-    copy_attributes,
     copy_group_recursive,
     get_freq_group,
     get_or_create_target_store,
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from typing import Self
 
     from zarr.abc.store import Store
-    from zarr.storage import StoreLike, StorePath
+    from zarr.storage import StoreLike
 
     from rkns.util import TreeRepr
 
@@ -82,10 +82,22 @@ class RKNS:
 
     def get_frequency_by_channel(self, channel_name: str) -> float:
         fg = self._get_frequencygroup(channel_name)
-        return self._signals[fg].attrs["sample_frequency_HZ"]  # type: ignore
+        return self._signals[fg].attrs["sfreq_Hz"]  # type: ignore
 
     def get_signal_by_freq(self, frequency: float) -> np.ndarray:
         return self._get_signal_by_fg(get_freq_group(frequency))
+
+    def get_signal_by_channel(
+        self,
+        channel: str,
+    ):
+        raise NotImplementedError("...")
+
+    def get_duration(self) -> float:
+        return self.admin_info["recording_duration_in_s"]  # type: ignore
+
+    def get_recording_start(self) -> datetime.datetime:
+        return datetime.datetime.fromisoformat(self.admin_info["recording_date"])  # type: ignore
 
     def _get_signal_by_fg(self, frequency_group: str) -> np.ndarray:
         digital_signal = self._get_digital_signal_by_fg(frequency_group=frequency_group)

@@ -4,7 +4,7 @@ import io
 import os
 import sys
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence, cast
 
 import rich
 import rich.console
@@ -14,8 +14,6 @@ from zarr.core.group import AsyncGroup
 if TYPE_CHECKING:
     from typing import TypeVar
 
-    from numpy.typing import ArrayLike
-    from zarr.abc.codec import BaseCodec
 
     T = TypeVar("T", bound=type)
 
@@ -104,7 +102,10 @@ def check_open(method: Callable):
 
 
 def apply_check_open_to_all_methods(cls: T) -> T:
-    """Apply the @check_open decorator to all methods of a class."""
+    """
+    Apply the @check_open decorator to all methods of a class.
+    That is, it checks if the instance is closed before executing a method.
+    """
     for name, method in cls.__dict__.items():
         if (
             callable(method)

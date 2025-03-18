@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from asyncio import run
-from typing import Iterator, cast
+from typing import cast
 
 import zarr
 import zarr.errors
