@@ -42,7 +42,7 @@
     }
   },
   // Make sure to download the test file on devcontainer creation
-  "postCreateCommand": "poetry install --with dev,test --no-interaction && make download_test_file",
+  "postCreateCommand": "poetry install --with dev,test --no-interaction",
   "forwardPorts": [],
   "mounts": [
     "source=${localWorkspaceFolder},target=/workspaces/rkns,type=bind,consistency=cached"
