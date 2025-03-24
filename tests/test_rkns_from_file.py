@@ -56,10 +56,10 @@ def get_file_md5(path: str | Path) -> str:
 
 @pytest.mark.parametrize("path", paths)
 def test_validity(path, rkns_obj):
-    check_validity(rkns_obj._root)
+    check_validity(rkns_obj.handler.root)
 
-    check_rkns_validity(rkns_obj._rkns)
-    check_raw_validity(rkns_obj._raw)
+    check_rkns_validity(rkns_obj.handler.rkns)
+    check_raw_validity(rkns_obj.handler.raw)
 
 
 ########### Getter Functions #########

@@ -19,6 +19,7 @@ import zarr.storage
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
 from rkns.file_formats import FileFormat
+from rkns.handler import StoreHandler
 from rkns.util import (
     RKNSNodeNames,
     RKNSParseError,
@@ -27,7 +28,6 @@ from rkns.util import (
     copy_group_recursive,
     get_freq_group,
     get_or_create_target_store,
-    group_tree_with_attrs_async,
 )
 from rkns.util.zarr_util import deep_compare_groups
 from rkns.version import __version__
@@ -51,38 +51,35 @@ class RKNS:
     """The RKNS class represents a single ExG record of a subject.
     Data is always a Zarr store."""
 
-    def __init__(self, store: zarr.storage.StoreLike) -> None:
-        self.store = store
-        self.__root: zarr.Group | None = None
-        self.__raw: zarr.Group | None = None
-        self.__rkns: zarr.Group | None = None
+    def __init__(self, store_handler: StoreHandler) -> None:
+        self.handler = store_handler
         self._is_closed = False
 
         self.adapter = AdapterRegistry.get_adapter(
-            file_format=self.get_fileformat_raw_signal()
+            file_format=self.get_fileformat_of_raw_signal()
         )
 
     @property
     def patient_info(self) -> zarr.core.common.JSON:
-        return self._rkns.attrs["patient_info"]
+        return self.handler.rkns.attrs["patient_info"]
 
     @property
     def admin_info(self) -> zarr.core.common.JSON:
-        return self._rkns.attrs["admin_info"]
+        return self.handler.rkns.attrs["admin_info"]
 
     @property
     def channel_info(self) -> zarr.core.common.JSON:
-        return self._rkns.attrs["channel_info"]
+        return self.handler.rkns.attrs["channel_info"]
 
     def get_channel_names(self) -> list[str]:
         return [k for k in self.channel_info.keys()]  # type: ignore
 
     def _get_channel_names_by_fg(self, frequency_group: str) -> list[str]:
-        return self._signals[frequency_group].attrs["channels"]  # type: ignore
+        return self.handler.signals[frequency_group].attrs["channels"]  # type: ignore
 
     def get_frequency_by_channel(self, channel_name: str) -> float:
         fg = self._get_frequencygroup(channel_name)
-        return self._signals[fg].attrs["sfreq_Hz"]  # type: ignore
+        return self.handler.signals[fg].attrs["sfreq_Hz"]  # type: ignore
 
     def get_signal_by_freq(self, frequency: float) -> np.ndarray:
         return self._get_signal_by_fg(get_freq_group(frequency))
@@ -113,17 +110,19 @@ class RKNS:
         return m * (digital_signal + bias)
 
     def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
-        return self._signals[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
+        return self.handler.signals[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
 
     def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
-        return self._signals[frequency_group][RKNSNodeNames.rkns_signal_minmaxs.value]  # type: ignore
+        return self.handler.signals[frequency_group][
+            RKNSNodeNames.rkns_signal_minmaxs.value
+        ]  # type: ignore
 
     def _get_frequencygroup(self, channel_name: str) -> str:
         # attributes of the /rkns contain the mapping from channel_name to frequency_group
         return self.channel_info[channel_name]["frequency_group"]  # type: ignore
 
     def _get_frequencygroups(self) -> list[str]:
-        return [k for k in self._signals.keys()]
+        return [k for k in self.handler.signals.keys()]
 
     def is_equal_to(
         self,
@@ -133,8 +132,8 @@ class RKNS:
         compare_attributes: bool = True,
     ) -> bool:
         return deep_compare_groups(
-            self._root,
-            other._root,
+            self.handler.root,
+            other.handler.root,
             max_depth=max_depth,
             compare_values=compare_values,
             compare_attributes=compare_attributes,
@@ -170,12 +169,12 @@ class RKNS:
 
         try:
             target_root = zarr.group(store=target_store, overwrite=True)
-            copy_group_recursive(self._root, target_root)
+            copy_group_recursive(self.handler.root, target_root)
         finally:
             target_store.close()
 
-    def get_fileformat_raw_signal(self) -> FileFormat:
-        _raw_signal = self._raw[RKNSNodeNames.raw_signal.value]
+    def get_fileformat_of_raw_signal(self) -> FileFormat:
+        _raw_signal = self.handler.raw[RKNSNodeNames.raw_signal.value]
         fileformat_id = _raw_signal.attrs["format"]
         return FileFormat(fileformat_id)
 
@@ -206,7 +205,7 @@ class RKNS:
         return RKNSBuilder.from_file(file_path, populate_from_raw, target_store)
 
     def _reconstruct_original_file(self, file_path: str | Path) -> None:
-        signal_array = self._raw[RKNSNodeNames.raw_signal.value]
+        signal_array = self.handler.raw[RKNSNodeNames.raw_signal.value]
         # Write the array to the file in binary mode
         with open(file_path, "wb") as file:
             file.write(signal_array[:].tobytes())  # type: ignore
@@ -215,8 +214,8 @@ class RKNS:
         self, overwrite_if_exists: bool = False, validate: bool = True
     ) -> Self:
         self.adapter.populate_rkns_from_raw(
-            raw_node=self._raw,
-            root_node=self._root,
+            raw_node=self.handler.raw,
+            root_node=self.handler.root,
             overwrite_if_exists=overwrite_if_exists,
             validate=validate,
         )
@@ -229,18 +228,7 @@ class RKNS:
         return self
 
     def __exit__(self, *args):
-        if hasattr(self.store, "close"):
-            self.close()  # type: ignore
-
-    def close(self) -> None:
-        """Safely close the underlying store if required"""
-        if not self._is_closed:
-            try:
-                if hasattr(self.store, "close"):
-                    self._store.close()  # type: ignore
-                self._is_closed = True
-            except Exception as e:
-                logger.error(f"Error closing store: {str(e)}", exc_info=True)
+        self.handler.close()
 
     @property
     def tree(self, max_depth: int | None = None, show_attrs: bool = True) -> TreeRepr:
@@ -259,51 +247,18 @@ class RKNS:
         -------
             TODO: Not exactly sure what it
         """
-        return self._root._sync(
-            group_tree_with_attrs_async(
-                self._root._async_group, max_depth=max_depth, show_attrs=show_attrs
-            )
-        )
+        return self.handler.tree(max_depth, show_attrs)
 
-    @staticmethod
-    def _make_rkns_header() -> dict[str, str]:
+
+class RKNSBuilder:
+    @classmethod
+    def _make_rkns_header(cls) -> dict[str, str]:
         """Generate header for RKNS file. This should contain information relevant for the
         compatibility between different RKNS versions.
         It must be a JSON-serializable dict."""
 
         return {"rkns_version": __version__, "rkns_implementation": "python"}
 
-    @property
-    def _root(self) -> zarr.Group:
-        if self.__root is None:
-            self.__root = zarr.open_group(self.store, mode="r+")
-        return self.__root
-
-    @property
-    def _raw(self) -> zarr.Group:
-        if self.__raw is None:
-            # NOTE: Read only does not seem to work for individual groups
-            # This would have to be done for the whole store.
-            self.__raw = zarr.open_group(
-                self.store, path=RKNSNodeNames.raw_root.value, mode="r"
-            )
-        return self.__raw
-
-    @property
-    def _rkns(self) -> zarr.Group:
-        if self.__rkns is None:
-            self.__rkns = zarr.open_group(
-                self.store, path=RKNSNodeNames.rkns_root.value, mode="r+"
-            )
-        return self.__rkns
-
-    @property
-    def _signals(self) -> zarr.Group:
-        rkns_signal = RKNSNodeNames.rkns_signals_group.value
-        return cast(zarr.Group, self._rkns[rkns_signal])
-
-
-class RKNSBuilder:
     @classmethod
     def from_file(
         cls,
@@ -383,19 +338,15 @@ class RKNSBuilder:
         ValueError
             If the RKNS version in the header does not match the current version.
         """
-        if (isinstance(store, Path) or isinstance(store, str)) and Path(
-            store
-        ).suffix == ".zip":
-            root = zarr.group(zarr.storage.ZipStore(store, mode="w"))
-        else:
-            root = zarr.open(store, mode="r+")
-        # Check the RKNS header
+        handler = StoreHandler(store)
+
+        # compare header versions
         try:
-            rkns_header = cast(dict[str, str], root.attrs["rkns_header"])
+            rkns_header = cast(dict[str, str], handler.root.attrs["rkns_header"])
         except KeyError as e:
             raise RKNSParseError("No rkns_header found in store.") from e
 
-        current_header = RKNS._make_rkns_header()
+        current_header = cls._make_rkns_header()
         if rkns_header.get("rkns_version") != current_header["rkns_version"]:
             raise ValueError(
                 f"RKNS version mismatch. Expected {current_header['version']}, "
@@ -414,9 +365,9 @@ class RKNSBuilder:
             )
 
         if validate:
-            check_validity(root)
+            check_validity(handler.root)
 
-        return RKNS(store=store)
+        return RKNS(store_handler=handler)
 
     @classmethod
     def from_external_format(
@@ -447,12 +398,10 @@ class RKNSBuilder:
         -------
             _description_
         """
-        if target_store is None:
-            target_store = zarr.storage.MemoryStore()
+        handler = StoreHandler(target_store)
 
         file_path = Path(file_path)
-        root_node = cls.__create_root_node(target_store)
-
+        root_node = cls.__create_root_node(handler)
         raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
         cls.__fill_raw_binary(raw_node, file_path, file_format)
 
@@ -461,7 +410,7 @@ class RKNSBuilder:
         root_node.create_group(name=RKNSNodeNames.history.value)
         root_node.create_group(name=RKNSNodeNames.popis.value)
 
-        rkns = RKNS(store=target_store)
+        rkns = RKNS(store_handler=handler)
 
         return rkns
 
@@ -490,19 +439,10 @@ class RKNSBuilder:
         _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
     @classmethod
-    def __create_root_node(cls, store: StoreLike | None) -> zarr.Group:
+    def __create_root_node(cls, handler: StoreHandler) -> zarr.Group:
         """Initialize the Zarr datastructure for the RKNS object."""
-
-        if isinstance(store, str):
-            if Path(store).exists():
-                raise FileExistsError(
-                    f"Failed to create RKNS file. Path {store} already exists."
-                )
-
-        root = (
-            zarr.create_group(store=store, overwrite=False) if store else zarr.group()
-        )
-        root.attrs["rkns_header"] = RKNS._make_rkns_header()
+        root = handler.create_group(path=None, overwrite=False)
+        root.attrs["rkns_header"] = cls._make_rkns_header()
         root.attrs["creation_time"] = time()  # current_time_since_epoch
 
         return root
