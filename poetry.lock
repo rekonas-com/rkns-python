@@ -1278,14 +1278,14 @@ files = [
 
 [[package]]
 name = "zarr"
-version = "3.0.5"
+version = "3.0.6"
 description = "An implementation of chunked, compressed, N-dimensional arrays for Python"
 optional = false
 python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "zarr-3.0.5-py3-none-any.whl", hash = "sha256:e56f8cf1f8105a118a9cdadb78f3b44363b9c67f326a569d79271a1f1cb338e1"},
-    {file = "zarr-3.0.5.tar.gz", hash = "sha256:4ac0a09d66875d398ab53c95fd4bddca2f3d757a04454831fc2d54bfbafcb7e5"},
+    {file = "zarr-3.0.6-py3-none-any.whl", hash = "sha256:dba078726b6e4defb0ae6a852b7e7035ce163d89d485961681ece49191dcce82"},
+    {file = "zarr-3.0.6.tar.gz", hash = "sha256:6ef23c740e34917a2a1099471361537732942e49f0cabe95c9b7124cd0d6d84f"},
 ]
 
 [package.dependencies]
