@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from asyncio import run
+from pathlib import Path
 from typing import cast
 
 import zarr
 import zarr.errors
 from zarr.core.group import GroupMetadata
 
+from rkns.file_formats import FileFormat
 from rkns.util import RKNSNodeNames
 
 from ..util import RKNSNodeNames as Names
@@ -24,6 +26,22 @@ class RKNSBaseAdapter(ABC):
 
     Not technically an adapter in an object oriented sense, and more like a Data Converter.
     """
+
+    @classmethod
+    def populate_raw_from_file(
+        cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
+    ) -> zarr.Group:
+        # set attributes that are consistent across fileformats here.
+        _raw_node.attrs["format"] = file_format.value
+
+        return cls._populate_raw_from_file(_raw_node, file_path, file_format)
+
+    @classmethod
+    @abstractmethod
+    def _populate_raw_from_file(
+        cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
+    ) -> zarr.Group:
+        pass
 
     @classmethod
     @abstractmethod

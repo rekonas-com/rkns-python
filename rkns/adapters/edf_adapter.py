@@ -3,6 +3,8 @@ from __future__ import annotations
 import tempfile
 from collections import defaultdict
 from datetime import datetime
+from hashlib import md5
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -12,10 +14,16 @@ import zarr.codecs as codecs
 import zarr.errors
 
 from rkns.adapters.base import RKNSBaseAdapter
+from rkns.file_formats import FileFormat
 from rkns.util import RKNSNodeNames, add_child_array, get_freq_group
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
+
+
+# TODO: Move this into a separate (external) config
+RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
+
 
 # dictionaries mapping the signal header keys to the keys within RKNS
 ## These will be added as an additional array of shape (n_channels, len(dictionary)) in /rkns/scaling_array,
@@ -79,6 +87,31 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
     compressors = codecs.ZstdCodec(level=3)
 
     @classmethod
+    def _populate_raw_from_file(
+        cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
+    ) -> zarr.Group:
+        # TODO this simply loads the whole chunk into memory.
+        # this should be doable in a more elegant manner using (variable) chunks
+        byte_array = np.fromfile(file_path, dtype=np.byte)
+
+        # TODO: Decide on codec here.
+        compressors = codecs.ZstdCodec(level=3)
+        _raw_signal = _raw_node.create_array(
+            name=RKNSNodeNames.raw_signal.value,
+            shape=byte_array.shape,
+            dtype=byte_array.dtype,
+            chunks=RAW_CHUNK_SIZE_BYTES,
+            compressors=compressors,
+        )
+        _raw_signal[:] = byte_array
+        _raw_signal.attrs["filename"] = file_path.name
+        _raw_signal.attrs["format"] = file_format.value
+        stat = file_path.stat()
+        _raw_signal.attrs["st_mtime"] = stat.st_mtime
+        _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
+        return _raw_node
+
+    @classmethod
     def populate_rkns_from_raw(
         cls,
         raw_node: zarr.Group,
@@ -104,7 +137,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
 
         add_frequency_groups_to_headers(signal_headers)
 
-        fg_arrays, fg_attributes, rkns_attributes = cls.extract_data(
+        fg_arrays, fg_attributes, rkns_attributes = cls._extract_data(
             channel_data, signal_headers, header, validate=validate
         )
         _rkns.update_attributes(rkns_attributes)
@@ -128,7 +161,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         return rkns_signals_node
 
     @classmethod
-    def extract_data(cls, channel_data, signal_headers, header, validate: bool = True):
+    def _extract_data(cls, channel_data, signal_headers, header, validate: bool = True):
         """
         Helper function to extract the data in a format easily translatable to RKNS.
         """
@@ -217,66 +250,26 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
                 + " inconsistent with respect to the duration of the record."
             )
 
-    # def from_src(self) -> None:
-    #     if self.src_path:
-    #         """
-    #         -------
-    #         signals : np.ndarray or list
-    #             the signals of the chosen channels contained in the EDF.
-    #         signal_headers : list
-    #             one signal header for each channel in the EDF.
-    #         header : dict
-    #             the main header of the EDF file containing meta information.
+    # @classmethod
+    # def _create(
+    #     cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
+    # ):
+    #     # TODO this simply loads the whole chunk into memory.
+    #     # this should be doable in a more elegant manner using (variable) chunks
+    #     byte_array = np.fromfile(file_path, dtype=np.byte)
 
-    #         """
-
-    #         channel_data, signal_headers, header = pyedflib.highlevel.read_edf(
-    #             self.src_path, digital=True
-    #         )
-    #         # TODO: Override highlevel EDFReader to also output filetype
-    #         # For now use the underlying EDFReader and extract filtype manually
-    #         file_type = -1
-    #         with pyedflib.EdfReader(self.src_path) as f:
-    #             file_type = f.filetype
-
-    #         # We can hard-code the adapter_type string as it is defined by the concrete implementation
-    #         self.raw_group.attrs["adapter_type"] = "rkns.RKNSAdapter.RKNSEdfAdapter"
-    #         self.raw_group.attrs["file_type"] = file_type
-    #         self.raw_group.attrs["header"] = json.dumps(header, default=str)
-
-    #         signal_data_group = self.raw_group.create_group(name="signal_data")
-    #         signal_data_group.attrs["signal_headers"] = json.dumps(
-    #             signal_headers, default=str
-    #         )
-    #         for channel, header in zip(channel_data, signal_headers):
-    #             z = signal_data_group.create_array(
-    #                 name=header["label"], shape=channel.shape, dtype=channel.dtype
-    #             )
-    #             z[:] = channel
-    #     else:
-    #         raise TypeError("src_path cannot be None")
-
-    # def recreate_src(self, path: str) -> None:
-    #     file_type = int(cast(int, self.raw_group.attrs["file_type"]))
-    #     header = json.loads(cast(str, self.raw_group.attrs["header"]))
-    #     # re-create header dict from JSON-serialized header
-    #     if header["startdate"]:
-    #         header["startdate"] = datetime.datetime.strptime(
-    #             header["startdate"], "%Y-%m-%d %H:%M:%S"
-    #         )
-    #     signal_data_group = self.raw_group["signal_data"]
-    #     signal_headers = json.loads(
-    #         cast(str, signal_data_group.attrs["signal_headers"])
+    #     # TODO: Decide on codec here.
+    #     compressors = codecs.ZstdCodec(level=3)
+    #     _raw_signal = _raw_node.create_array(
+    #         name=RKNSNodeNames.raw_signal.value,
+    #         shape=byte_array.shape,
+    #         dtype=byte_array.dtype,
+    #         chunks=RAW_CHUNK_SIZE_BYTES,
+    #         compressors=compressors,
     #     )
-    #     signal_data = [
-    #         signal_data_group[signal_header["label"]][:]  # type: ignore
-    #         for signal_header in signal_headers
-    #     ]
-    #     pyedflib.highlevel.write_edf(
-    #         edf_file=path,
-    #         signals=signal_data,
-    #         signal_headers=signal_headers,
-    #         header=header,
-    #         digital=True,
-    #         file_type=file_type,
-    #     )
+    #     _raw_signal[:] = byte_array
+    #     _raw_signal.attrs["filename"] = file_path.name
+    #     _raw_signal.attrs["format"] = file_format.value
+    #     stat = file_path.stat()
+    #     _raw_signal.attrs["st_mtime"] = stat.st_mtime
+    #     _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()

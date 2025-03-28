@@ -3,19 +3,18 @@ from __future__ import annotations
 import datetime
 import logging
 import warnings
-from hashlib import md5
 from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING, Optional, cast
 
 import numpy as np
 import zarr
-import zarr.codecs as codecs
 import zarr.core
 import zarr.core.common
 import zarr.errors
 import zarr.storage
 
+from rkns.adapters.base import RKNSBaseAdapter
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
 from rkns.file_formats import FileFormat
@@ -43,21 +42,17 @@ if TYPE_CHECKING:
 
     from rkns.util import TreeRepr
 
-RAW_CHUNK_SIZE_BYTES = 1024 * 1024 * 8  # 8MB Chunks
-
 
 @apply_check_open_to_all_methods
 class RKNS:
     """The RKNS class represents a single ExG record of a subject.
     Data is always a Zarr store."""
 
-    def __init__(self, store_handler: StoreHandler) -> None:
+    def __init__(self, store_handler: StoreHandler, adapter: RKNSBaseAdapter) -> None:
         self.handler = store_handler
         self._is_closed = False
 
-        self.adapter = AdapterRegistry.get_adapter(
-            file_format=self.get_fileformat_of_raw_signal()
-        )
+        self.adapter = adapter
 
     @property
     def patient_info(self) -> zarr.core.common.JSON:
@@ -367,7 +362,9 @@ class RKNSBuilder:
         if validate:
             check_validity(handler.root)
 
-        return RKNS(store_handler=handler)
+        file_format = FileFormat(handler.raw.attrs["format"])
+        adapter = AdapterRegistry.get_adapter(file_format)
+        return RKNS(store_handler=handler, adapter=adapter)
 
     @classmethod
     def from_external_format(
@@ -399,44 +396,21 @@ class RKNSBuilder:
             _description_
         """
         handler = StoreHandler(target_store)
+        adapter = AdapterRegistry.get_adapter(file_format)
 
         file_path = Path(file_path)
         root_node = cls.__create_root_node(handler)
         raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
-        cls.__fill_raw_binary(raw_node, file_path, file_format)
+        adapter.populate_raw_from_file(raw_node, file_path, file_format)
 
         # create history and popis groups
         # TODO: We did not yet define the structure..
         root_node.create_group(name=RKNSNodeNames.history.value)
         root_node.create_group(name=RKNSNodeNames.popis.value)
 
-        rkns = RKNS(store_handler=handler)
+        rkns = RKNS(store_handler=handler, adapter=adapter)
 
         return rkns
-
-    @classmethod
-    def __fill_raw_binary(
-        cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
-    ):
-        # TODO this simply loads the whole chunk into memory.
-        # this should be doable in a more elegant manner using (variable) chunks
-        byte_array = np.fromfile(file_path, dtype=np.byte)
-
-        # TODO: Decide on codec here.
-        compressors = codecs.ZstdCodec(level=3)
-        _raw_signal = _raw_node.create_array(
-            name=RKNSNodeNames.raw_signal.value,
-            shape=byte_array.shape,
-            dtype=byte_array.dtype,
-            chunks=RAW_CHUNK_SIZE_BYTES,
-            compressors=compressors,
-        )
-        _raw_signal[:] = byte_array
-        _raw_signal.attrs["filename"] = file_path.name
-        _raw_signal.attrs["format"] = file_format.value
-        stat = file_path.stat()
-        _raw_signal.attrs["st_mtime"] = stat.st_mtime
-        _raw_signal.attrs["md5"] = md5(byte_array.tobytes()).hexdigest()
 
     @classmethod
     def __create_root_node(cls, handler: StoreHandler) -> zarr.Group:
