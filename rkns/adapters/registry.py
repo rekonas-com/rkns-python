@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 from ..util import import_from_string
 
@@ -28,7 +28,7 @@ class AdapterRegistry:
         cls._adapters[file_format] = adapter_path
 
     @classmethod
-    def get_adapter(cls, file_format: FileFormat) -> RKNSBaseAdapter:
+    def get_adapter(cls, file_format: FileFormat) -> Type[RKNSBaseAdapter]:
         """Dynamically load the adapter class only when needed."""
         adapter_path = cls._adapters.get(file_format)
         if not adapter_path:

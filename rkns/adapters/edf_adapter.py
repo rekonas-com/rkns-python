@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from hashlib import md5
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyedflib
@@ -86,16 +86,15 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
 
     compressors = codecs.ZstdCodec(level=3)
 
-    @classmethod
     def _populate_raw_from_file(
-        cls, _raw_node: zarr.Group, file_path: Path, file_format: FileFormat
+        self, file_path: Path, file_format: FileFormat
     ) -> zarr.Group:
         # TODO this simply loads the whole chunk into memory.
         # this should be doable in a more elegant manner using (variable) chunks
         byte_array = np.fromfile(file_path, dtype=np.byte)
 
         add_child_array(
-            parent_node=_raw_node,
+            parent_node=self._handler.raw,
             data=byte_array,
             name=RKNSNodeNames.raw_signal.value,
             chunks=RAW_CHUNK_SIZE_BYTES,
@@ -108,21 +107,16 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             },
         )
 
-        return _raw_node
+        return self._handler.raw
 
-    @classmethod
     def populate_rkns_from_raw(
-        cls,
-        raw_node: zarr.Group,
-        root_node: zarr.Group,
+        self,
         overwrite_if_exists: bool = False,
         validate: bool = True,
     ) -> zarr.Group:
-        _rkns = cast(zarr.Group, root_node[RKNSNodeNames.rkns_root.value])
-        rkns_signals_node = cast(
-            zarr.Group, _rkns[RKNSNodeNames.rkns_signals_group.value]
-        )
-        raw_signal_node = cast(zarr.Group, raw_node[RKNSNodeNames.raw_signal.value])
+        rkns_node = self._handler.rkns
+        rkns_signals_node = self._handler.signals
+        raw_signal_node = self._handler.raw[RKNSNodeNames.raw_signal.value]
 
         # TODO: This is just a hacky workaround to use the existing library.
         # We probably need our custom parser..
@@ -137,10 +131,10 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
 
         add_frequency_groups_to_headers(signal_headers)
 
-        fg_arrays, fg_attributes, rkns_attributes = cls._extract_data(
+        fg_arrays, fg_attributes, rkns_attributes = self._extract_data(
             channel_data, signal_headers, header, validate=validate
         )
-        _rkns.update_attributes(rkns_attributes)
+        rkns_node.update_attributes(rkns_attributes)
 
         for fg in fg_arrays.keys():
             fg_node = rkns_signals_node.create_group(fg)
@@ -160,8 +154,9 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
 
         return rkns_signals_node
 
-    @classmethod
-    def _extract_data(cls, channel_data, signal_headers, header, validate: bool = True):
+    def _extract_data(
+        self, channel_data, signal_headers, header, validate: bool = True
+    ):
         """
         Helper function to extract the data in a format easily translatable to RKNS.
         """
@@ -219,7 +214,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
             len(channel_data[0]) / signal_headers[0]["sample_frequency"]
         )
         if validate:
-            cls.validate_consistent_duration(channel_data, signal_headers)
+            self.validate_consistent_duration(channel_data, signal_headers)
 
         rkns_attributes = dict(patient_info={}, admin_info={})
         for pyedf_key, rkns_attribute_name in header_patientinfo_attributes.items():

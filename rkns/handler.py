@@ -50,7 +50,7 @@ class StoreHandler:
                 raise RuntimeError(
                     f"The {RKNSNodeNames.rkns_root.value} node does not exist."
                 ) from e
-        return self._raw
+        return cast(zarr.Group, self._raw)
 
     @property
     def rkns(self) -> zarr.Group:

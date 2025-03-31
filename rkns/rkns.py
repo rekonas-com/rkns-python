@@ -209,8 +209,6 @@ class RKNS:
         self, overwrite_if_exists: bool = False, validate: bool = True
     ) -> Self:
         self.adapter.populate_rkns_from_raw(
-            raw_node=self.handler.raw,
-            root_node=self.handler.root,
             overwrite_if_exists=overwrite_if_exists,
             validate=validate,
         )
@@ -331,9 +329,8 @@ class RKNSBuilder:
 
         return rkns
 
-    @classmethod
     def from_existing_rkns_store(
-        cls,
+        self,
         store: zarr.storage.StoreLike,
         validate: bool = True,
     ) -> RKNS:
@@ -365,7 +362,7 @@ class RKNSBuilder:
         except KeyError as e:
             raise RKNSParseError("No rkns_header found in store.") from e
 
-        current_header = cls._make_rkns_header()
+        current_header = self._make_rkns_header()
         if rkns_header.get("rkns_version") != current_header["rkns_version"]:
             raise ValueError(
                 f"RKNS version mismatch. Expected {current_header['version']}, "
@@ -387,7 +384,9 @@ class RKNSBuilder:
             check_validity(handler.root)
 
         file_format = FileFormat(handler.raw.attrs["format"])
-        adapter = AdapterRegistry.get_adapter(file_format)
+        Adapter = AdapterRegistry.get_adapter(file_format)
+        adapter = Adapter(handler=self._handler)
+
         return RKNS(store_handler=handler, adapter=adapter)
 
     def from_external_format(
@@ -420,8 +419,9 @@ class RKNSBuilder:
         file_path = Path(file_path)
         self._init_base_structure()
 
-        adapter = AdapterRegistry.get_adapter(file_format)
-        adapter.populate_raw_from_file(self._handler.raw, file_path, file_format)
+        Adapter = AdapterRegistry.get_adapter(file_format)
+        adapter = Adapter(handler=self._handler)
+        adapter.populate_raw_from_file(file_path, file_format)
 
         rkns = RKNS(store_handler=self._handler, adapter=adapter)
 
