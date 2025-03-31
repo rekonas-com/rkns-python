@@ -1,15 +1,13 @@
 import hashlib
-import os
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pyedflib
 import pytest
-import zarr
 
 from rkns.rkns import RKNS
-from rkns.util import check_validity, deep_compare_groups
+from rkns.util import check_validity
 from rkns.util.rkns_util import check_raw_validity, check_rkns_validity
 
 paths = ["tests/files/test_file.edf"]
@@ -185,10 +183,15 @@ def test_rkns_from_edf_physical(path, rkns_obj, pyedf_physical):
     for fg in fgs:
         channel_names = rkns_obj._get_channel_names_by_fg(fg)
         rkns_physical_signal = rkns_obj._get_signal_by_fg(fg)
+        rkns_physical_signal_direct = rkns_obj._get_signal_by_freq(float(fg[3:]))
+
         for i, channel_name in enumerate(channel_names):
             val1 = reference_fgs[channel_name]
             val2 = rkns_physical_signal[:].T[i]
+            val3 = rkns_physical_signal_direct[:].T[i]
+
             np.testing.assert_allclose(val1, val2)
+            np.testing.assert_allclose(val2, val3)
 
 
 @pytest.mark.parametrize(

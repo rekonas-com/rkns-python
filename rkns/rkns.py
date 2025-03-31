@@ -6,7 +6,6 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, cast
 
-import numpy as np
 import zarr
 import zarr.core
 import zarr.core.common
@@ -19,6 +18,7 @@ from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
 from rkns.file_formats import FileFormat
 from rkns.handler import StoreHandler
+from rkns.lazy import LazySignal
 from rkns.util import (
     RKNSNodeNames,
     RKNSParseError,
@@ -76,10 +76,10 @@ class RKNS:
         fg = self._get_frequencygroup(channel_name)
         return self.handler.signals[fg].attrs["sfreq_Hz"]  # type: ignore
 
-    def get_signal_by_freq(self, frequency: float) -> np.ndarray:
+    def _get_signal_by_freq(self, frequency: float) -> LazySignal:
         return self._get_signal_by_fg(get_freq_group(frequency))
 
-    def get_signal_by_channel(
+    def _get_signal_by_channel(
         self,
         channel: str,
     ):
@@ -91,23 +91,23 @@ class RKNS:
     def get_recording_start(self) -> datetime.datetime:
         return datetime.datetime.fromisoformat(self.admin_info["recording_date"])  # type: ignore
 
-    def _get_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _get_signal_by_fg(self, frequency_group: str) -> LazySignal:
         digital_signal = self._get_digital_signal_by_fg(frequency_group=frequency_group)
         pminmax_dminmax = self._pminmax_dminmax_by_fg(frequency_group=frequency_group)
 
-        # NOTE: Important to cast here: Number might and probably is twice as large as np.int16
-        pmin = pminmax_dminmax[[0]]
-        pmax = pminmax_dminmax[[1]]
-        dmin = pminmax_dminmax[[2]]
-        dmax = pminmax_dminmax[[3]]
-        m = (pmax - pmin) / (dmax - dmin)
-        bias = pmax / m - dmax
-        return m * (digital_signal + bias)
+        l_signal = LazySignal(
+            digital_signal,
+            pmin=cast(int, pminmax_dminmax[[0]]),
+            pmax=cast(int, pminmax_dminmax[[1]]),
+            dmin=cast(int, pminmax_dminmax[[2]]),
+            dmax=cast(int, pminmax_dminmax[[3]]),
+        )
+        return l_signal
 
-    def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _get_digital_signal_by_fg(self, frequency_group: str) -> zarr.Array:
         return self.handler.signals[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
 
-    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> zarr.Array:
         return self.handler.signals[frequency_group][
             RKNSNodeNames.rkns_signal_minmaxs.value
         ]  # type: ignore
