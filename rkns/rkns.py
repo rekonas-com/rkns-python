@@ -4,13 +4,13 @@ import datetime
 import logging
 import warnings
 from pathlib import Path
-from time import time
 from typing import TYPE_CHECKING, Optional, cast
 
 import numpy as np
 import zarr
 import zarr.core
 import zarr.core.common
+import zarr.core.group
 import zarr.errors
 import zarr.storage
 
@@ -197,7 +197,7 @@ class RKNS:
         -------
             _description_
         """
-        return RKNSBuilder.from_file(file_path, populate_from_raw, target_store)
+        return RKNSBuilder(target_store).from_file(file_path, populate_from_raw)
 
     def _reconstruct_original_file(self, file_path: str | Path) -> None:
         signal_array = self.handler.raw[RKNSNodeNames.raw_signal.value]
@@ -246,6 +246,34 @@ class RKNS:
 
 
 class RKNSBuilder:
+    def __init__(self, store: StoreLike | None = None):
+        self._handler = StoreHandler(store)
+
+    def _init_base_structure(self) -> None:
+        """
+        Initialize root node with all base attributes (no separate helpers).
+        """
+        # root node with header + timestamp
+        root = self._handler.create_group(path=None)
+        root.attrs.update(
+            {
+                "rkns_header": self._make_rkns_header(),
+                "creation_time": datetime.datetime.now().isoformat(),
+            }
+        )
+
+        # hierarchy of top-level groups
+        self._handler.create_hierarchy(
+            root_node=root,
+            nodes=[
+                f"{RKNSNodeNames.raw_root.value}",
+                f"{RKNSNodeNames.history.value}",
+                f"{RKNSNodeNames.popis.value}",
+                f"{RKNSNodeNames.rkns_root.value}/{RKNSNodeNames.rkns_signals_group.value}",
+                f"{RKNSNodeNames.rkns_root.value}/{RKNSNodeNames.rkns_annotations_group.value}",
+            ],
+        )
+
     @classmethod
     def _make_rkns_header(cls) -> dict[str, str]:
         """Generate header for RKNS file. This should contain information relevant for the
@@ -254,12 +282,10 @@ class RKNSBuilder:
 
         return {"rkns_version": __version__, "rkns_implementation": "python"}
 
-    @classmethod
     def from_file(
-        cls,
+        self,
         file_path: StoreLike,
         populate_from_raw: bool = True,
-        target_store: StoreLike | None = None,
     ) -> RKNS:
         """
         Create an instance of RKNS based on a given file path.
@@ -292,16 +318,14 @@ class RKNSBuilder:
             )
 
         if file_format == FileFormat.RKNS:
-            rkns = cls.from_existing_rkns_store(file_path)
+            rkns = self.from_existing_rkns_store(file_path)
         else:
             if not isinstance(file_path, str):
                 # should not be reachable, as Stores will automatically be detected as RKNS.
                 raise TypeError(
                     f"For external formats  must be str | Path, but is {file_path=}"
                 )
-            rkns = cls.from_external_format(
-                file_path, file_format=file_format, target_store=target_store
-            )
+            rkns = self.from_external_format(file_path, file_format=file_format)
             if populate_from_raw:
                 rkns.populate_rkns_from_raw()
 
@@ -366,12 +390,10 @@ class RKNSBuilder:
         adapter = AdapterRegistry.get_adapter(file_format)
         return RKNS(store_handler=handler, adapter=adapter)
 
-    @classmethod
     def from_external_format(
-        cls,
+        self,
         file_path: str | Path,
         file_format: FileFormat,
-        target_store: StoreLike | None,
     ) -> RKNS:
         """
         Create /_raw group, fills it with binary data given in file_path,
@@ -395,28 +417,12 @@ class RKNSBuilder:
         -------
             _description_
         """
-        handler = StoreHandler(target_store)
-        adapter = AdapterRegistry.get_adapter(file_format)
-
         file_path = Path(file_path)
-        root_node = cls.__create_root_node(handler)
-        raw_node = root_node.create_group(name=RKNSNodeNames.raw_root.value)
-        adapter.populate_raw_from_file(raw_node, file_path, file_format)
+        self._init_base_structure()
 
-        # create history and popis groups
-        # TODO: We did not yet define the structure..
-        root_node.create_group(name=RKNSNodeNames.history.value)
-        root_node.create_group(name=RKNSNodeNames.popis.value)
+        adapter = AdapterRegistry.get_adapter(file_format)
+        adapter.populate_raw_from_file(self._handler.raw, file_path, file_format)
 
-        rkns = RKNS(store_handler=handler, adapter=adapter)
+        rkns = RKNS(store_handler=self._handler, adapter=adapter)
 
         return rkns
-
-    @classmethod
-    def __create_root_node(cls, handler: StoreHandler) -> zarr.Group:
-        """Initialize the Zarr datastructure for the RKNS object."""
-        root = handler.create_group(path=None, overwrite=False)
-        root.attrs["rkns_header"] = cls._make_rkns_header()
-        root.attrs["creation_time"] = time()  # current_time_since_epoch
-
-        return root

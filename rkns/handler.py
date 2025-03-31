@@ -1,15 +1,18 @@
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Iterable, cast
 
 import zarr
 import zarr.storage
+from zarr.core.group import GroupMetadata
 
 from rkns.util import RKNSNodeNames, TreeRepr, group_tree_with_attrs_async
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from zarr.core.metadata import ArrayV2Metadata, ArrayV3Metadata
+
     from rkns.util import TreeRepr
 
 
@@ -30,23 +33,36 @@ class StoreHandler:
     @property
     def root(self) -> zarr.Group:
         if self._root is None:
-            self._root = zarr.open_group(self._store, mode="r+")
+            try:
+                self._root = zarr.open_group(self._store, mode="r+")
+            except FileNotFoundError as e:
+                raise RuntimeError("The root node ('/') does not exist.") from e
         return self._root
 
     @property
     def raw(self) -> zarr.Group:
         if self._raw is None:
-            self._raw = zarr.open_group(
-                self._store, path=RKNSNodeNames.raw_root.value, mode="r"
-            )
+            try:
+                self._raw = zarr.open_group(
+                    self._store, path=RKNSNodeNames.raw_root.value, mode="r"
+                )
+            except FileNotFoundError as e:
+                raise RuntimeError(
+                    f"The {RKNSNodeNames.rkns_root.value} node does not exist."
+                ) from e
         return self._raw
 
     @property
     def rkns(self) -> zarr.Group:
         if self._rkns is None:
-            self._rkns = zarr.open_group(
-                self._store, path=RKNSNodeNames.rkns_root.value, mode="r+"
-            )
+            try:
+                self._rkns = zarr.open_group(
+                    self._store, path=RKNSNodeNames.rkns_root.value, mode="r+"
+                )
+            except FileNotFoundError as e:
+                raise RuntimeError(
+                    f"The {RKNSNodeNames.rkns_root.value} node does not exist."
+                ) from e
         return self._rkns
 
     @property
@@ -66,6 +82,25 @@ class StoreHandler:
         self, path: str | None = None, overwrite: bool = False
     ) -> zarr.Group:
         return zarr.create_group(store=self._store, path=path, overwrite=overwrite)
+
+    def create_hierarchy(
+        self,
+        root_node: zarr.Group,
+        nodes: Iterable[str],
+        *,
+        overwrite: bool = False,
+    ):
+        _dict: dict[str, ArrayV2Metadata | ArrayV3Metadata | GroupMetadata] = {
+            node: GroupMetadata() for node in nodes
+        }
+        return [node for node in root_node.create_hierarchy(_dict, overwrite=overwrite)]
+        #         {
+        #     f"{RKNSNodeNames.raw_root.value}": ,
+        #     f"{RKNSNodeNames.history.value}": GroupMetadata(),
+        #     f"{RKNSNodeNames.popis.value}": GroupMetadata(),
+        #     f"{RKNSNodeNames.rkns_root.value}/{RKNSNodeNames.rkns_signals_group.value}": GroupMetadata(),
+        #     f"{RKNSNodeNames.rkns_root.value}/{RKNSNodeNames.rkns_annotations_group.value}": GroupMetadata(),
+        # }
 
     # def create_array(self, path: str, data: Any, **kwargs) -> zarr.Array:
     #     """Create a new array at the specified path with given data."""

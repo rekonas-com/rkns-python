@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from asyncio import run
 from pathlib import Path
 from typing import cast
 
 import zarr
 import zarr.errors
-from zarr.core.group import GroupMetadata
 
 from rkns.file_formats import FileFormat
-from rkns.util import RKNSNodeNames
 
 from ..util import RKNSNodeNames as Names
 from ..util import check_rkns_validity
@@ -53,49 +50,6 @@ class RKNSBaseAdapter(ABC):
         validate: bool = True,
     ) -> zarr.Group:
         pass
-
-    @classmethod
-    def create_rkns_group_structure(
-        cls, root_node: zarr.Group, overwrite_if_exists: bool
-    ) -> tuple[zarr.Group, zarr.Group, zarr.Group]:
-        _rkns_name = RKNSNodeNames.rkns_root.value
-        _rkns_signals_name = RKNSNodeNames.rkns_signals_group.value
-        _rkns_annotations_name = RKNSNodeNames.rkns_annotations_group.value
-
-        try:
-            hierarchy = root_node.create_hierarchy(
-                {
-                    f"{_rkns_name}/{_rkns_signals_name}": GroupMetadata(),
-                    f"{_rkns_name}/{_rkns_annotations_name}": GroupMetadata(),
-                }
-            )
-            node_dict = {key: value for key, value in hierarchy}
-
-        except zarr.errors.ContainsGroupError as e:
-            if overwrite_if_exists:
-                run(root_node.store.delete_dir(_rkns_signals_name))
-
-                hierarchy = root_node.create_hierarchy(
-                    {
-                        f"{_rkns_name}/{_rkns_signals_name}": GroupMetadata(),
-                        f"{_rkns_name}/{_rkns_annotations_name}": GroupMetadata(),
-                    }
-                )
-                node_dict = {key: value for key, value in hierarchy}
-
-            else:
-                raise RuntimeError(
-                    "The group node /rkns already exists."
-                    + "\n For overwriting it, set 'overwrite_if_exists=True'"
-                ) from e
-
-        # we only created groups, so we can cast properly..
-        # _rkns_signals_node = cast(Iterator[tuple[str, zarr.Group]], _rkns_signals_node)
-        return (
-            cast(zarr.Group, node_dict[f"{_rkns_name}"]),
-            cast(zarr.Group, node_dict[f"{_rkns_name}/{_rkns_signals_name}"]),
-            cast(zarr.Group, node_dict[f"{_rkns_name}/{_rkns_annotations_name}"]),
-        )
 
 
 class RKNSIdentityAdapter(RKNSBaseAdapter):
