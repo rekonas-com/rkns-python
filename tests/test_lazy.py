@@ -58,3 +58,15 @@ class TestLazySignal:
         chunk = test_signal[1:3]
         assert len(chunk) == 2
         assert pytest.approx(chunk[1]) == 1.0
+
+    def test_multiindex_slicing(self, test_signal):
+        """Test partial materialization"""
+
+        digital = zarr.array(np.arange(250).reshape(10, 25), dtype="int16")
+        signal = LazySignal(digital, pmin=-1.0, pmax=1.0, dmin=0, dmax=3000)
+
+        assert np.isscalar(signal[0, 0])
+        assert signal[:10, :10].shape == (10, 10)
+        assert signal[:10, :].shape == (10, digital.shape[1])
+
+        # assert pytest.approx(chunk[1]) == 1.0
