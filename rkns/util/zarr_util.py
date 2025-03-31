@@ -45,12 +45,14 @@ def add_child_array(
     name: str,
     attributes: dict[str, Any] | None = None,
     compressors: BaseCodec | None = None,
+    **kwargs,
 ):
     zarr_array = parent_node.create_array(
         name=name,
         shape=data.shape,  # type: ignore
         dtype=data.dtype,  # type: ignore
         compressors=compressors,
+        **kwargs,
     )
     zarr_array[:] = data
 

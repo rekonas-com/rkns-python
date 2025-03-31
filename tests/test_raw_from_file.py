@@ -21,7 +21,7 @@ def get_file_md5(path: str | Path) -> str:
 @pytest.mark.parametrize("path", paths)
 def test_raw_md5(path):
     rkns_obj = RKNS.from_file(path, populate_from_raw=False)
-    _raw_signal = rkns_obj._raw[RKNSNodeNames.raw_signal.value]
+    _raw_signal = rkns_obj.handler.raw[RKNSNodeNames.raw_signal.value]
     md5 = _raw_signal.attrs["md5"]  # type: ignore
     ref_md5 = get_file_md5(path)
     assert md5 == ref_md5

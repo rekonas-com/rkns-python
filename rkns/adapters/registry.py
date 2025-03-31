@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 from ..util import import_from_string
 
@@ -14,19 +14,21 @@ class AdapterRegistry:
     Registry for modular addition and lazy loading of new adapters.
     Adapters are registered in the modules __init__.
 
+
     Note: This is implemented via a class to simulate a singleton.
     """
 
     # dictionary that keeps track of module paths
     _adapters: dict[FileFormat, str] = dict()
+    _raw_writer: dict[FileFormat, str] = dict()
 
     @classmethod
-    def register(cls, file_format: FileFormat, adapter_path: str) -> None:
+    def register_adapter(cls, file_format: FileFormat, adapter_path: str) -> None:
         """Register adapter as a string path to defer import."""
         cls._adapters[file_format] = adapter_path
 
     @classmethod
-    def get_adapter(cls, file_format: FileFormat) -> RKNSBaseAdapter:
+    def get_adapter(cls, file_format: FileFormat) -> Type[RKNSBaseAdapter]:
         """Dynamically load the adapter class only when needed."""
         adapter_path = cls._adapters.get(file_format)
         if not adapter_path:
