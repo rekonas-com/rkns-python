@@ -121,7 +121,7 @@ def test_rkns_from_edf_attributes(path, rkns_obj, pyedf_digital):
     with pyedflib.EdfReader(path) as pyedf:
         assert pyedf.getBirthdate() == rkns_obj.patient_info["birthdate"]  # type: ignore
         assert pyedf.getSex() == rkns_obj.patient_info["sex"]  # type: ignore
-        assert pyedf.getFileDuration() == rkns_obj.get_duration()
+        assert pyedf.getFileDuration() == rkns_obj.get_recording_duration()
 
 
 @pytest.mark.parametrize("path", paths)
@@ -211,14 +211,14 @@ def test_get_signal_by_singlechannel(path, rkns_obj, pyedf_physical):
         reference[channel_name]["fg"] = fg
 
     for channel_name in reference.keys():
-        signal = rkns_obj._get_signal_by_channels_within_same_fg(channel_name)
+        signal = rkns_obj.get_signal(channel_name)
         assert signal.shape == reference[channel_name]["data"].shape
         np.testing.assert_allclose(reference[channel_name]["data"], signal)
         assert isinstance(signal, np.ndarray)
 
     # test with channel not existing
     with pytest.raises(KeyError):
-        rkns_obj._get_signal_by_channels_within_same_fg("fail")
+        rkns_obj.get_signal("fail")
 
 
 @pytest.mark.parametrize("path", paths)
@@ -246,25 +246,110 @@ def test_get_signal_by_multichannel_singlegroup(path, rkns_obj, pyedf_physical):
     # test with ALL channels of the group
     channels = fg_to_channel[fgs[0]]
     ref = np.concatenate([reference[c]["data"] for c in channels], 1)
-    rkns_signal = rkns_obj._get_signal_by_channels_within_same_fg(channels)
+    rkns_signal = rkns_obj.get_signal(channels)
     assert ref.shape == rkns_signal.shape
     np.testing.assert_allclose(ref, rkns_signal)
 
     # test with subset of channels of the group
     channels = fg_to_channel[fgs[1]][::-2]
     ref = np.concatenate([reference[c]["data"] for c in channels], 1)
-    rkns_signal = rkns_obj._get_signal_by_channels_within_same_fg(channels)
+    rkns_signal = rkns_obj.get_signal(channels)
     assert ref.shape == rkns_signal.shape
     np.testing.assert_allclose(ref, rkns_signal)
 
     # test with one channel not existing
     channels = fg_to_channel[fgs[1]][:2]
     with pytest.raises(KeyError):
-        rkns_obj._get_signal_by_channels_within_same_fg(channels + ["fail"])
+        rkns_obj.get_signal(channels + ["fail"])
 
     # test if the channels come from a different fg
     with pytest.raises(ValueError):
-        rkns_obj._get_signal_by_channels_within_same_fg(["DC01", "DC04"])
+        rkns_obj.get_signal(["DC01", "DC04"])
+
+
+@pytest.mark.parametrize("path", paths)
+def test_get_signal_by_frequency(path, rkns_obj, pyedf_physical):
+    """
+    For a single channel, test the getter function.
+    """
+    channel_data_dig, signal_headers, header = pyedf_physical
+
+    reference = defaultdict(dict)
+    unique_fgs = set()
+    for s, data in zip(signal_headers, channel_data_dig):
+        channel_name = s["label"]
+        fg = get_freq_group(s["sample_frequency"])
+
+        reference[channel_name]["data"] = np.array(data)
+        reference[channel_name]["fg"] = fg
+        unique_fgs.add((fg, s["sample_frequency"]))
+
+    for fg, sfreq in unique_fgs:
+        signal_sfreq = rkns_obj.get_signal(sfreq_Hz=sfreq)
+        signal_ref = rkns_obj._get_signal_by_fg(fg)
+        assert signal_sfreq.shape == signal_ref.shape
+
+        np.testing.assert_allclose(signal_sfreq, signal_ref)
+
+        channel_names = rkns_obj._get_channel_names_by_fg(fg)
+        for i, channel_name in enumerate(channel_names):
+            signal_ref_ch = reference[channel_name]["data"]
+            signal_rkns_ch = signal_sfreq[:].T[i]
+
+            np.testing.assert_allclose(signal_ref_ch, signal_rkns_ch)
+            # np.testing.assert_allclose(val2, val3)
+
+    # test with frequency not existing
+    with pytest.raises(KeyError):
+        rkns_obj.get_signal(sfreq_Hz=1234567.123)
+
+
+@pytest.mark.parametrize("path", paths)
+def test_get_signal_by_time(path, rkns_obj, pyedf_physical):
+    """
+    For multiple channels of a single group, test the getter function.
+    The getter should return a single numpy array, with values in order of the channels.
+    """
+    channel_data_dig, signal_headers, header = pyedf_physical
+
+    # build reference, we need all channels of each group
+    reference = defaultdict(dict)
+    fg_to_channel = defaultdict(list)
+    for s, data in zip(signal_headers, channel_data_dig):
+        channel_name = s["label"]
+        fg = get_freq_group(s["sample_frequency"])
+        reference[channel_name]["data"] = np.array(data)[:, np.newaxis]
+        reference[channel_name]["fg"] = fg
+        fg_to_channel[fg].append(channel_name)
+
+    fgs = [fg for fg in fg_to_channel.keys()]
+
+    assert len(fgs) >= 3  # sanity check to make sure we have enough fgs for this test
+
+    # test with ALL channels of the group
+    channels = fg_to_channel[fgs[0]]
+    ref = np.concatenate([reference[c]["data"] for c in channels], 1)
+    rkns_signal = rkns_obj.get_signal(
+        channels,
+        time_range=(0, rkns_obj.get_recording_duration() / 2),
+    )
+    np.testing.assert_allclose(ref[: ref.shape[0] // 2, :], rkns_signal)
+
+    ref = np.concatenate([reference[c]["data"] for c in channels], 1)
+
+    rkns_signal = rkns_obj.get_signal(
+        channels[:3],
+        time_range=(
+            rkns_obj.get_recording_duration() / 4,
+            rkns_obj.get_recording_duration() * 3 / 4,
+        ),
+    )
+    np.testing.assert_allclose(
+        ref[ref.shape[0] // 4 : ref.shape[0] * 3 // 4, :3], rkns_signal
+    )
+
+    with pytest.raises(ValueError):
+        rkns_signal = rkns_obj.get_signal(channels[:3], time_range=(1, 0))
 
 
 @pytest.mark.parametrize(

@@ -4,7 +4,8 @@ import datetime
 import logging
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Optional, cast
+from types import EllipsisType
+from typing import TYPE_CHECKING, Iterable, Optional, OrderedDict, cast
 
 import numpy as np
 import zarr
@@ -75,63 +76,125 @@ class RKNS:
 
     def get_frequency_by_channel(self, channel_name: str) -> float:
         fg = self._get_frequencygroup(channel_name)
-        return self.handler.signals[fg].attrs["sfreq_Hz"]  # type: ignore
+        return cast(float, self.handler.signals[fg].attrs["sfreq_Hz"])
 
     def _get_signal_by_freq(self, frequency: float) -> LazySignal:
         return self._get_signal_by_fg(get_freq_group(frequency))
 
-    def _get_signal_by_channels_within_same_fg(
-        self, channels: str | Iterable[str]
+    def get_signal(
+        self,
+        channels: str | Iterable[str] | None = None,
+        sfreq_Hz: float | None = None,
+        time_range: tuple[float, float] = (0, np.inf),
     ) -> np.ndarray:
-        """Fetches signal data for channels within the SAME frequency group.
+        if channels is not None and sfreq_Hz is not None:
+            raise ValueError("Specify either channels or frequency, not both.")
+        elif channels is None and sfreq_Hz is None:
+            raise ValueError("Specify one of either channels or frequency.")
+        elif channels is None and sfreq_Hz is not None:
+            sfreq_Hz = cast(float, sfreq_Hz)
+            fg = get_freq_group(sfreq_Hz)
+
+        elif channels is not None and sfreq_Hz is None:
+            if isinstance(channels, str):
+                channels = [channels]
+
+            fgs = {self._get_frequencygroup(c) for c in channels}
+            if len(fgs) != 1:
+                raise ValueError("Channels must belong to the same frequency group.")
+            fg = next(iter(fgs))
+            sfreq_Hz = cast(float, self.handler.signals[fg].attrs["sfreq_Hz"])
+        else:
+            # Unnecessary but helps pylance.
+            raise RuntimeError("Unreachable code reached..")
+
+        row_idx = self.__build_row_idx_from_timerange(
+            sfreq_Hz=sfreq_Hz, time_range=time_range
+        )
+        col_idx = self.__build_col_idx_from_channels(
+            channels=channels, frequency_group=fg
+        )
+        return self._get_signal_by_fg(fg)[row_idx, col_idx]
+
+    def __build_row_idx_from_timerange(
+        self,
+        sfreq_Hz: float,
+        time_range: tuple[float, float] = (0, np.inf),
+    ):
+        if time_range[0] is None:
+            time_range[0] = 0
+
+        if time_range[1] is None:
+            time_range[1] = np.inf
+
+        if time_range[1] <= time_range[0]:
+            raise ValueError(
+                " Invalid time range: {time_range=}. "
+                + "End time must be larger than start time."
+            )
+
+        start_idx = int(time_range[0] * sfreq_Hz)
+        end_time = min(time_range[0] + self.get_recording_duration(), time_range[1])
+        end_idx = int(end_time * sfreq_Hz)
+        return slice(start_idx, end_idx)
+
+    def __build_col_idx_from_channels(
+        self, channels: Iterable[str] | None, frequency_group: str
+    ) -> list[int] | EllipsisType:
+        if channels is None:
+            return ...
+        channel_to_index = self.get_channel_order(frequency_group=frequency_group)
+        index_order = [channel_to_index[channel] for channel in channels]
+        return index_order
+
+    def get_channel_order(
+        self, frequency_group: str | None = None, sfreq_in_Hz: float | None = None
+    ) -> OrderedDict[str, int]:
+        """
+        Get the order in which the channels are stored for a given frequency (in Hz) or frequency group.
+        Return an ordered dictionary, with the items corresponding to the channel names,
+        and the values correspond to their column index in the underlying zarr store.
+        This order corresponds to the one you obtain when querying ALL channels of a group with `get_signal`.
+
+        Note that channels are always grouped with other channels of similar frequency.
+
+        The order of the items corresponds to the index.
+        E.g. the returned OrderedDict could look like {"F1":0, "F2": 1, "F3":2, ...}
 
         Parameters
         ----------
-            channels: A single channel name or a list of channels (must belong to the same FG).
+        frequency_group, optional
+            Specify the wanted frequency_group, by default None
+        sfreq_in_Hz, optional
+            Specify the wanted frequency in Hz, by default None
 
         Returns
         -------
-            np.ndarray: Signal data for requested channels.
+            An OrderedDict mapping the channel name to its column index in the stored array.
 
-        Raises:
-        -------
-            ValueError: If channels belong to different frequency groups.
         """
-        if isinstance(channels, str):
-            channels = [channels]
+        if frequency_group is not None and sfreq_in_Hz is not None:
+            raise ValueError("Specify either frequency or frequency_group, not both.")
+        elif frequency_group is None and sfreq_in_Hz is None:
+            raise ValueError("Specify one of either frequency or frequency_group.")
+        elif sfreq_in_Hz is not None:
+            frequency_group = get_freq_group(freq_in_Hz=sfreq_in_Hz)
+        else:
+            frequency_group = cast(str, frequency_group)
+        channel_names_ordered = self.handler.get_channels_by_fg(frequency_group)
+        channel_to_index = OrderedDict(
+            (item, idx) for idx, item in enumerate(channel_names_ordered)
+        )
+        return channel_to_index
 
-        fgs = {self._get_frequencygroup(c) for c in channels}
-        if len(fgs) != 1:
-            raise ValueError("Channels must belong to the same frequency group.")
+    def get_recording_duration(self) -> float:
+        """
+        Return duration of the recording in seconds.
 
-        fg = next(iter(fgs))
-        channel_order = self.handler.get_channels_by_fg(fg)
-        channel_to_index = {item: idx for idx, item in enumerate(channel_order)}
-        index_order = [channel_to_index[channel] for channel in channels]
-        return self._get_signal_by_fg(fg)[:, index_order]
-
-    # def _get_signal_by_channels(
-    #     self,
-    #     channels: str | Iterable[str],
-    # ) -> np.ndarray:
-    #     # i.e. if not a list of strings, turn into a list
-    #     if isinstance(channels, str):
-    #         channels = [channels]
-
-    #     # get fgs for accessing channels
-    #     fgs = [self._get_frequencygroup(c) for c in channels]
-    #     if len(fgs) == 1:
-    #         # all belong to the same frequency group, return one array.
-    #         fg = fgs[0]
-    #         channel_order = self.handler.get_channels_by_fg(fg)
-    #         channel_to_index = {item: idx for idx, item in enumerate(channel_order)}
-    #         index_order = [channel_to_index[channel] for channel in channels]
-    #         return self._get_signal_by_fg(fg)[:, index_order]
-    #     else:
-    #         # multiple frequency groups, return {fg:data} dictionary.
-    #         pass
-
-    def get_duration(self) -> float:
+        Returns
+        -------
+            Duration in seconds.
+        """
         return self.admin_info["recording_duration_in_s"]  # type: ignore
 
     def get_recording_start(self) -> datetime.datetime:
