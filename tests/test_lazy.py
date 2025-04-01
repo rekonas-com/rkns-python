@@ -31,8 +31,14 @@ class TestLazySignal:
     @pytest.fixture
     def test_signal(self):
         """Create test signal with known scaling"""
-        digital = zarr.array([1000, 2000, 3000], dtype="int16")
-        return LazySignal(digital, pmin=-1.0, pmax=1.0, dmin=0, dmax=3000)
+        digital = zarr.array([[1000], [2000], [3000]], dtype="int16")
+        return LazySignal(
+            digital,
+            pmin=np.array([[-1.0]]),
+            pmax=np.array([[1.0]]),
+            dmin=np.array([[0]]),
+            dmax=np.array([[3000]]),
+        )
 
     def test_scaling_calculation(self, test_signal):
         """Verify EDF scaling formula"""
@@ -49,7 +55,7 @@ class TestLazySignal:
     def test_array_interface(self, test_signal):
         """Test NumPy compatibility"""
         arr = np.array(test_signal)
-        assert arr.shape == (3,)
+        assert arr.shape == (3, 1)
         assert arr.dtype == np.float64
         assert pytest.approx(arr[0]) == -0.333333  # Midpoint should be zero
 
@@ -63,10 +69,18 @@ class TestLazySignal:
         """Test partial materialization"""
 
         digital = zarr.array(np.arange(250).reshape(10, 25), dtype="int16")
-        signal = LazySignal(digital, pmin=-1.0, pmax=1.0, dmin=0, dmax=3000)
+        signal = LazySignal(
+            digital,
+            pmin=-np.ones((1, 25)),
+            pmax=np.ones((1, 25)),
+            dmin=np.zeros((1, 25)),
+            dmax=3000 * np.ones((1, 25)),
+        )
 
         assert np.isscalar(signal[0, 0])
         assert signal[:10, :10].shape == (10, 10)
         assert signal[:10, :].shape == (10, digital.shape[1])
+        assert signal[:, :].shape == signal[:].shape == (10, digital.shape[1])
 
-        # assert pytest.approx(chunk[1]) == 1.0
+        ref = signal._m * (digital + signal._bias)
+        np.testing.assert_allclose(signal[:10, :2], ref[:10, :2])
