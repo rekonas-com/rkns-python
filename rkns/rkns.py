@@ -87,6 +87,28 @@ class RKNS:
         sfreq_Hz: float | None = None,
         time_range: tuple[float, float] = (0, np.inf),
     ) -> np.ndarray:
+        """Get signal data for specified channels or frequency group.
+
+        Parameters
+        ----------
+        channels
+            Channel name(s) to retrieve. Mutually exclusive with `sfreq_Hz`.
+        sfreq_Hz
+            Sampling frequency in Hz to retrieve. Mutually exclusive with `channels`.
+        time_range : tuple[float, float], optional
+            Time range in seconds to retrieve, by default (0, inf), i.e. the whole time frame.
+            The time is with respect to the record duration.
+
+        Returns
+        -------
+            Signal data array for the specified parameters.
+
+        Raises
+        ------
+        ValueError
+            If both channels and frequency are specified, or neither is specified.
+            If specified channels belong to different frequency groups.
+        """
         if channels is not None and sfreq_Hz is not None:
             raise ValueError("Specify either channels or frequency, not both.")
         elif channels is None and sfreq_Hz is None:
@@ -121,6 +143,26 @@ class RKNS:
         sfreq_Hz: float,
         time_range: tuple[float, float] = (0, np.inf),
     ):
+        """
+        Build a row index slice from a given time range for samples with the given sampling frequency.
+
+        Parameters
+        ----------
+        sfreq_Hz : float
+            Sampling frequency in Hz.
+        time_range : tuple[float, float]
+            Time range in seconds (start, end). If `None`, defaults to (0, inf).
+
+        Returns
+        -------
+        slice
+            Slice object representing the row indices corresponding to the time range.
+
+        Raises
+        ------
+        ValueError
+            If the end time is not larger than the start time.
+        """
         if time_range[0] is None:
             time_range[0] = 0
 
@@ -141,6 +183,21 @@ class RKNS:
     def __build_col_idx_from_channels(
         self, channels: Iterable[str] | None, frequency_group: str
     ) -> list[int] | EllipsisType:
+        """
+        Convert channel names to their corresponding column indices for a given frequency group.
+
+        Parameters
+        ----------
+        channels
+            List of channel names to convert to indices. If None, returns `...` (Ellipsis)
+            to indicate all channels should be selected.
+        frequency_group
+            The frequency group to which the channels belong.
+
+        Returns
+        -------
+            List of column indices corresponding to the given channels, or `...` if no channels are specified.
+        """
         if channels is None:
             return ...
         channel_to_index = self.get_channel_order(frequency_group=frequency_group)
