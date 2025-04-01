@@ -4,8 +4,9 @@ import datetime
 import logging
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Iterable, Optional, cast
 
+import numpy as np
 import zarr
 import zarr.core
 import zarr.core.common
@@ -79,11 +80,56 @@ class RKNS:
     def _get_signal_by_freq(self, frequency: float) -> LazySignal:
         return self._get_signal_by_fg(get_freq_group(frequency))
 
-    def _get_signal_by_channel(
-        self,
-        channel: str,
-    ):
-        raise NotImplementedError("...")
+    def _get_signal_by_channels_within_same_fg(
+        self, channels: str | Iterable[str]
+    ) -> np.ndarray:
+        """Fetches signal data for channels within the SAME frequency group.
+
+        Parameters
+        ----------
+            channels: A single channel name or a list of channels (must belong to the same FG).
+
+        Returns
+        -------
+            np.ndarray: Signal data for requested channels.
+
+        Raises:
+        -------
+            ValueError: If channels belong to different frequency groups.
+        """
+        if isinstance(channels, str):
+            channels = [channels]
+
+        fgs = {self._get_frequencygroup(c) for c in channels}
+        if len(fgs) != 1:
+            raise ValueError("Channels must belong to the same frequency group.")
+
+        fg = next(iter(fgs))
+        channel_order = self.handler.get_channels_by_fg(fg)
+        channel_to_index = {item: idx for idx, item in enumerate(channel_order)}
+        index_order = [channel_to_index[channel] for channel in channels]
+        return self._get_signal_by_fg(fg)[:, index_order]
+
+    # def _get_signal_by_channels(
+    #     self,
+    #     channels: str | Iterable[str],
+    # ) -> np.ndarray:
+    #     # i.e. if not a list of strings, turn into a list
+    #     if isinstance(channels, str):
+    #         channels = [channels]
+
+    #     # get fgs for accessing channels
+    #     fgs = [self._get_frequencygroup(c) for c in channels]
+    #     if len(fgs) == 1:
+    #         # all belong to the same frequency group, return one array.
+    #         fg = fgs[0]
+    #         channel_order = self.handler.get_channels_by_fg(fg)
+    #         channel_to_index = {item: idx for idx, item in enumerate(channel_order)}
+    #         index_order = [channel_to_index[channel] for channel in channels]
+    #         return self._get_signal_by_fg(fg)[:, index_order]
+    #     else:
+    #         # multiple frequency groups, return {fg:data} dictionary.
+    #         pass
 
     def get_duration(self) -> float:
         return self.admin_info["recording_duration_in_s"]  # type: ignore
@@ -95,12 +141,12 @@ class RKNS:
         digital_signal = self._get_digital_signal_by_fg(frequency_group=frequency_group)
         pminmax_dminmax = self._pminmax_dminmax_by_fg(frequency_group=frequency_group)
 
-        l_signal = LazySignal(
+        l_signal = LazySignal.from_minmaxs(
             digital_signal,
-            pmin=cast(int, pminmax_dminmax[[0]]),
-            pmax=cast(int, pminmax_dminmax[[1]]),
-            dmin=cast(int, pminmax_dminmax[[2]]),
-            dmax=cast(int, pminmax_dminmax[[3]]),
+            pmin=cast(np.ndarray, pminmax_dminmax[[0]]),
+            pmax=cast(np.ndarray, pminmax_dminmax[[1]]),
+            dmin=cast(np.ndarray, pminmax_dminmax[[2]]),
+            dmax=cast(np.ndarray, pminmax_dminmax[[3]]),
         )
         return l_signal
 

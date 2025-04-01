@@ -2,29 +2,7 @@ import numpy as np
 import pytest
 import zarr
 
-from rkns.lazy import LazyIndexer, LazySignal
-
-
-class TestLazyIndexer:
-    def test_abstract_base_raises(self):
-        """Test base class requires implementation"""
-        with pytest.raises(NotImplementedError):
-
-            class ConcreteIndexer(LazyIndexer):
-                pass  # Missing _transform
-
-            ConcreteIndexer(np.array([1, 2, 3]))[0]
-
-    def test_shape_proxy(self):
-        """Test shape property delegates to source"""
-        source = zarr.array(np.random.rand(10, 20))
-
-        class DummyIndexer(LazyIndexer):
-            def _transform(self, chunk):
-                return chunk * 2
-
-        lazy = DummyIndexer(source)
-        assert lazy.shape == (10, 20)
+from rkns.lazy import LazySignal
 
 
 class TestLazySignal:
@@ -32,13 +10,24 @@ class TestLazySignal:
     def test_signal(self):
         """Create test signal with known scaling"""
         digital = zarr.array([[1000], [2000], [3000]], dtype="int16")
-        return LazySignal(
+        return LazySignal.from_minmaxs(
             digital,
             pmin=np.array([[-1.0]]),
             pmax=np.array([[1.0]]),
             dmin=np.array([[0]]),
             dmax=np.array([[3000]]),
         )
+
+    def test_shape_proxy(self, test_signal):
+        """Test shape property delegates to source"""
+        source = zarr.array(np.random.rand(10, 20))
+
+        class DummyIndexer(LazySignal):
+            def _transform(self, chunk, idx):
+                return chunk * 2
+
+        lazy = DummyIndexer(source, np.ones((1, 20)), np.ones((1, 20)))
+        assert lazy.shape == (10, 20)
 
     def test_scaling_calculation(self, test_signal):
         """Verify EDF scaling formula"""
@@ -69,7 +58,7 @@ class TestLazySignal:
         """Test partial materialization"""
 
         digital = zarr.array(np.arange(250).reshape(10, 25), dtype="int16")
-        signal = LazySignal(
+        signal = LazySignal.from_minmaxs(
             digital,
             pmin=-np.ones((1, 25)),
             pmax=np.ones((1, 25)),

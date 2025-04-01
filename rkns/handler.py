@@ -70,6 +70,9 @@ class StoreHandler:
         rkns_signal = RKNSNodeNames.rkns_signals_group.value
         return cast(zarr.Group, self.rkns[rkns_signal])
 
+    def get_channels_by_fg(self, frequency_group: str) -> list[str]:
+        return cast(list[str], self.signals[frequency_group].attrs["channels"])
+
     def get_group(self, path: str, mode: str = "r") -> zarr.Group:
         """Get a Zarr group at the specified path."""
         return zarr.open_group(self._store, path=path, mode=mode)

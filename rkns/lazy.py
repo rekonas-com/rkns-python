@@ -1,4 +1,4 @@
-from typing import Any, Generic, Tuple, TypeVar, Union, cast
+from typing import Any, Tuple, TypeVar, Union, cast
 
 import numpy as np
 import zarr
@@ -6,62 +6,15 @@ import zarr
 T = TypeVar("T", bound=Union[zarr.Array, np.ndarray])
 
 
-class LazyIndexer(Generic[T]):
-    """
-    Generic lazy-evaluated container that applies transformations on-demand.
-    Supports all NumPy indexing patterns while avoiding premature materialization.
-
-    Usage:
-    - Inherit and implement `_transform` for specific conversions
-    - Wrap any array-like object (zarr, numpy, etc.)
-    """
-
-    def __init__(self, source: T):
-        self._source = source
-
-    def __getitem__(self, idx: Union[int, slice, Tuple, np.ndarray]) -> np.ndarray:
-        """Apply transformation to requested elements.
-        Just forward the slicing logic to source object.
-        """
-        source_sliced = cast(np.ndarray, self._source.__getitem__(idx))
-        return self._transform(source_sliced, idx)
-
-    def _transform(
-        self, chunk: np.ndarray, idx: Union[int, slice, Tuple, np.ndarray]
-    ) -> np.ndarray:
-        """Override this with domain-specific logic"""
-        raise NotImplementedError()
-
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        return self._source.shape
-
-    @property
-    def dtype(self) -> np.dtype:
-        return np.result_type(self._source.dtype, np.float32)
-
-    def __array__(self, dtype: Any = None) -> np.ndarray:
-        arr = self[:]  # Materialize full array
-        return arr.astype(dtype) if dtype else arr
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(shape={self.shape}, dtype={self.dtype})"
-
-
-class LazySignal(LazyIndexer[zarr.Array]):
+class LazySignal:
     """EDF-format signal specific implementation"""
 
     def __init__(
-        self,
-        source: zarr.Array,
-        pmin: np.ndarray,
-        pmax: np.ndarray,
-        dmin: np.ndarray,
-        dmax: np.ndarray,
+        self, source: zarr.Array | np.ndarray, _m: np.ndarray, _bias: np.ndarray
     ):
-        super().__init__(source)
-        self._m = (pmax - pmin) / (dmax - dmin)
-        self._bias = (pmax / self._m) - dmax
+        self._source = source
+        self._m = _m
+        self._bias = _bias
 
         if len(self._m.shape) != 2 or self._m.shape[1] != source.shape[1]:
             raise ValueError(
@@ -73,7 +26,51 @@ class LazySignal(LazyIndexer[zarr.Array]):
                 f"Shape of scale factor {self._m.shape} does not match source shape {source.shape}."
             )
 
-    def slice_transform_param(self, idx) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Generic lazy-evaluated container that applies transformations on-demand.
+    Supports all NumPy indexing patterns while avoiding premature materialization.
+
+    Usage:
+    - Inherit and implement `_transform` for specific conversions
+    - Wrap any array-like object (zarr, numpy, etc.)
+    """
+
+    def __getitem__(self, idx: Union[int, slice, Tuple, np.ndarray]) -> np.ndarray:
+        """Apply transformation to requested elements.
+        Just forward the slicing logic to source object.
+        """
+        source_sliced = cast(np.ndarray, self._source.__getitem__(idx))
+        return self._transform(source_sliced, idx)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self._source.shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        return np.result_type(self._source.dtype, self._m.dtype)
+
+    def __array__(self, dtype: Any = None) -> np.ndarray:
+        arr = self[:]  # Materialize full array
+        return arr.astype(dtype) if dtype else arr  # type: ignore
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(shape={self.shape}, dtype={self.dtype})"
+
+    @classmethod
+    def from_minmaxs(
+        cls,
+        source: zarr.Array | np.ndarray,
+        pmin: np.ndarray,
+        pmax: np.ndarray,
+        dmin: np.ndarray,
+        dmax: np.ndarray,
+    ) -> "LazySignal":
+        _m = (pmax - pmin) / (dmax - dmin)
+        _bias = (pmax / _m) - dmax
+        return cls(source=source, _m=_m, _bias=_bias)
+
+    def slice_columns_param(self, idx) -> Tuple[np.ndarray, np.ndarray]:
         """
         Slice the parameter self._m and self._bias, which are of shape [1, n_channels],
         as they are intended to be broadcastable to the data.
@@ -130,5 +127,5 @@ class LazySignal(LazyIndexer[zarr.Array]):
         """
         # Extract the second dimension's slice info
 
-        _m, _bias = self.slice_transform_param(idx)
+        _m, _bias = self.slice_columns_param(idx)
         return _m * (chunk + _bias)
