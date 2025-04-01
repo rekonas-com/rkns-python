@@ -1,12 +1,9 @@
-from typing import Iterable
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
 import zarr
 import zarr.codecs
 import zarr.storage
-from zarr import AsyncGroup
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
 from zarr.storage import LocalStore, MemoryStore
 
@@ -15,7 +12,6 @@ from rkns.util.zarr_util import (
     ArrayValueMismatchError,
     AttributeMismatchError,
     GroupComparisonError,
-    GroupPathMismatchError,
     MemberCountMismatchError,
     NameMismatchError,
     PathMismatchError,
