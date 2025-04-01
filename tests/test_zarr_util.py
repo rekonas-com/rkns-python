@@ -398,8 +398,8 @@ def test_deep_compare_async_groups_path_mismatch():
 def test_deep_compare_async_groups_array_shape_mismatch():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    arr1 = mock_group1.create_array("array1", dtype=np.float32, shape=(3,))
-    arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    mock_group1.create_array("array1", dtype=np.float32, shape=(3,))
+    mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(ArrayShapeMismatchError):
         deep_compare_groups(mock_group1, mock_group2)
@@ -435,10 +435,10 @@ def test_deep_compare_async_groups_root_name_mismatch():
     mock_group1 = generate_group("a")
     mock_group2 = generate_group("a")
     sg1 = mock_group1.create_group("subgroup1")
-    ssg1 = sg1.create_group("grandchild")
+    sg1.create_group("grandchild")
 
     sg2 = mock_group2.create_group("subgroup2")
-    ssg2 = sg2.create_group("grandchild")
+    sg2.create_group("grandchild")
     with pytest.raises(PathMismatchError):
         deep_compare_groups(mock_group1, mock_group2)
 
@@ -447,10 +447,10 @@ def test_deep_compare_async_groups_same_tree():
     mock_group1 = generate_group("a")
     mock_group2 = generate_group("a")
     sg1 = mock_group1.create_group("subgroup1")
-    ssg1 = sg1.create_group("grandchild")
+    sg1.create_group("grandchild")
 
     sg2 = mock_group2.create_group("subgroup1")
-    ssg2 = sg2.create_group("grandchild")
+    sg2.create_group("grandchild")
     deep_compare_groups(mock_group1, mock_group2)
 
 
@@ -472,8 +472,8 @@ def test_deep_compare_async_groups_attribute_mismatch():
 def test_deep_compare_async_groups_array_and_group():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    arr1 = mock_group1.create_group("abca")
-    arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    mock_group1.create_group("abca")
+    mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(GroupComparisonError):
         deep_compare_groups(mock_group1, mock_group2)

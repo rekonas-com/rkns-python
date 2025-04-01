@@ -113,11 +113,11 @@ def test_frequency_by_channel(path, rkns_obj, pyedf_digital):
 @pytest.mark.parametrize("path", paths)
 def test_rkns_from_edf_attributes(path, rkns_obj, pyedf_digital):
     channel_data_dig, signal_headers, header = pyedf_digital
-    reference_fgs = {
+    {
         s["label"]: get_freq_group(s["sample_frequency"]) for s in signal_headers
     }
 
-    fg_names = rkns_obj._get_frequencygroups()
+    rkns_obj._get_frequencygroups()
     with pyedflib.EdfReader(path) as pyedf:
         assert pyedf.getBirthdate() == rkns_obj.patient_info["birthdate"]  # type: ignore
         assert pyedf.getSex() == rkns_obj.patient_info["sex"]  # type: ignore
