@@ -1,10 +1,6 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import numpy as np
 import pytest
-import zarr
-import zarr.codecs
-from rich.tree import Tree
 
 from rkns.util.misc import (
     TreeRepr,
