@@ -4,8 +4,8 @@ from enum import Enum
 from typing import Any, cast
 
 import numpy as np
-import zarr
-import zarr.storage
+
+from .zarr_util import ZarrGroup
 
 
 class RKNSNodeNames(str, Enum):
@@ -24,7 +24,7 @@ class RKNSNodeNames(str, Enum):
     rkns_signal_minmaxs = "signal_minmaxs"
 
 
-def check_validity(root_node: zarr.Group | Any) -> None:
+def check_validity(root_node: ZarrGroup | Any) -> None:
     expected_root_attributes = ["rkns_header", "creation_time"]
     for attribute in expected_root_attributes:
         if attribute not in root_node.attrs:
@@ -51,7 +51,7 @@ def check_validity(root_node: zarr.Group | Any) -> None:
     check_raw_validity(_raw_node=root_node[RKNSNodeNames.raw_root.value])
 
 
-def check_rkns_validity(rkns_node: zarr.Group | Any) -> None:
+def check_rkns_validity(rkns_node: ZarrGroup | Any) -> None:
     """
     TODO:
     - Check attributes
@@ -59,7 +59,7 @@ def check_rkns_validity(rkns_node: zarr.Group | Any) -> None:
     - check array shapes
 
     """
-    if not isinstance(rkns_node, zarr.Group):
+    if not isinstance(rkns_node, ZarrGroup):
         raise TypeError(f"The root node must be a Group, but is {type(rkns_node)}.")
 
     if not rkns_node.basename == RKNSNodeNames.rkns_root.value:
@@ -75,15 +75,15 @@ def check_rkns_validity(rkns_node: zarr.Group | Any) -> None:
     for expected_group in expected_children:
         if expected_group not in rkns_node:
             raise ValueError(f"Missing {expected_group=}. Invalid Format.")
-        elif not isinstance(rkns_node[expected_group], zarr.Group):
+        elif not isinstance(rkns_node[expected_group], ZarrGroup):
             raise TypeError(
-                f"Expected {expected_group} to be a zarr.Group, but it is {type(rkns_node[expected_group])}."
+                f"Expected {expected_group} to be a ZarrGroup, but it is {type(rkns_node[expected_group])}."
             )
 
     # check that all child groups of the /rkns/signals group start with "fg_"
     # If they do, check that they fg_ groups contain the "signal" and "signal_minmax" arrays.
     rkns_signals_group = cast(
-        zarr.Group, rkns_node[RKNSNodeNames.rkns_signals_group.value]
+        ZarrGroup, rkns_node[RKNSNodeNames.rkns_signals_group.value]
     )
     for name, subgroup in rkns_signals_group.groups():
         if not subgroup.basename.startswith(RKNSNodeNames.frequency_group_prefix.value):
@@ -102,12 +102,12 @@ def check_rkns_validity(rkns_node: zarr.Group | Any) -> None:
                 )
 
 
-def check_raw_validity(_raw_node: zarr.Group | Any) -> None:
+def check_raw_validity(_raw_node: ZarrGroup | Any) -> None:
     """
     TODO:
     - Check attribute types
     """
-    if not isinstance(_raw_node, zarr.Group):
+    if not isinstance(_raw_node, ZarrGroup):
         raise TypeError(f"The root node must be a Group, but is {type(_raw_node)}.")
 
     if not _raw_node.basename == RKNSNodeNames.raw_root.value:
@@ -127,7 +127,7 @@ def check_raw_validity(_raw_node: zarr.Group | Any) -> None:
         if attribute not in _raw_signal.attrs:
             raise ValueError(f"Missing required raw signal attribute: {attribute}")
 
-    if not isinstance(_raw_signal, zarr.Array) and _raw_signal.dtype != np.byte:  # type: ignore
+    if not isinstance(_raw_signal, ZarrGroup) and _raw_signal.dtype != np.byte:  # type: ignore
         raise TypeError(
             f"Expected Array of dtype np.byte, but got {type(_raw_signal)}."
         )

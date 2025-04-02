@@ -9,13 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyedflib
-import zarr
-import zarr.codecs as codecs
-import zarr.errors
 
 from rkns.adapters.base import RKNSBaseAdapter
 from rkns.file_formats import FileFormat
-from rkns.util import RKNSNodeNames, add_child_array, get_freq_group
+from rkns.util import RKNSNodeNames, get_freq_group
+from rkns.util.zarr_util import ZarrGroup, add_child_array, get_codec
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -84,21 +82,18 @@ def add_frequency_groups_to_headers(signal_headers: list[dict[str, Any]]) -> Non
 class RKNSEdfAdapter(RKNSBaseAdapter):
     """RKNS adapter for the EDF format."""
 
-    compressors = codecs.ZstdCodec(level=3)
-
     def _populate_raw_from_file(
         self, file_path: Path, file_format: FileFormat
-    ) -> zarr.Group:
+    ) -> ZarrGroup:
         # TODO this simply loads the whole chunk into memory.
         # this should be doable in a more elegant manner using (variable) chunks
         byte_array = np.fromfile(file_path, dtype=np.byte)
-
         add_child_array(
             parent_node=self._handler.raw,
             data=byte_array,
             name=RKNSNodeNames.raw_signal.value,
             chunks=RAW_CHUNK_SIZE_BYTES,
-            compressors=codecs.ZstdCodec(level=3),
+            compressors=get_codec("zstd", level=3),
             attributes={
                 "filename": file_path.name,
                 "format": file_format.value,
@@ -113,7 +108,7 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         self,
         overwrite_if_exists: bool = False,
         validate: bool = True,
-    ) -> zarr.Group:
+    ) -> ZarrGroup:
         rkns_node = self._handler.rkns
         rkns_signals_node = self._handler.signals
         raw_signal_node = self._handler.raw[RKNSNodeNames.raw_signal.value]

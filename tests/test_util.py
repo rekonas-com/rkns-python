@@ -3,11 +3,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rkns.util.misc import (
-    TreeRepr,
-    _group_tree_with_attrs_async,
     apply_check_open_to_all_methods,
     check_open,
     import_from_string,
+)
+from rkns.util.zarr_util import (
+    TreeRepr,
+    _group_tree_with_attrs_async,
 )
 
 

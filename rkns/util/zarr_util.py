@@ -1,50 +1,73 @@
 from __future__ import annotations
 
-from enum import Enum
+import io
+import os
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Iterable,
-    Literal,
-    Optional,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional, Sequence, cast
 
 import numpy as np
+import rich
+import rich.console
+import rich.tree
 import zarr
+import zarr.abc
+import zarr.abc.codec
+import zarr.codecs
+import zarr.registry
 import zarr.storage
-from zarr import Array, Group
 from zarr.abc.store import Store
 from zarr.core.attributes import Attributes
+from zarr.core.group import AsyncGroup
+
+# Handle ZarrGroup compatibility across versions
+try:
+    # v3
+    from zarr import Group as ZarrGroup  # type: ignore
+except ImportError:
+    # v2
+    from zarr.hierarchy import Group as ZarrGroup  # type: ignore  # noqa: F401
+from zarr import Array as ZarrArray
+
+# handle codecs across version
+from .types import JSON
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from typing import TypeVar
 
     from numpy.typing import ArrayLike
-    from zarr.abc.codec import BaseCodec
-    from zarr.core.common import JSON
+
+    try:
+        # v3
+        from zarr.abc.codec import BaseCodec as CodecType  # type: ignore # noqa: F401
+    except ImportError:
+        # v2
+        from numcodecs.abc import Codec as CodecType  # type: ignore  # noqa: F401
+    from zarr import Array as ZarrArray
 
     T = TypeVar("T", bound=type)
 
 
-class ZarrMode(Enum):
-    """Helper enum for Zarr persistence modes."""
-
-    READ_ONLY = "r"
-    READ_WRITE = "r+"
-    READ_WRITE_CREATE_IF_NOT_EXISTS = "a"
-    OVERWRITE = "w"
-    CREATE_IF_NOT_EXISTS = "w-"
+# class _ZarrImplementation(ABC):
+#     @staticmethod
+#     @abstractmethod
+#     def add_child_array(
+#         parent_node,  # group
+#         data: ArrayLike,
+#         name: str,
+#         attributes: dict[str, Any] | None = None,
+#         compressors: Codec | None = None,
+#         **kwargs,
+#     ):
+#         pass
 
 
 def add_child_array(
-    parent_node: zarr.Group,
+    parent_node: ZarrGroup,
     data: ArrayLike,
     name: str,
     attributes: dict[str, Any] | None = None,
-    compressors: BaseCodec | None = None,
+    compressors: zarr.abc.codec.BaseCodec | None = None,
     **kwargs,
 ):
     zarr_array = parent_node.create_array(
@@ -78,7 +101,7 @@ def get_or_create_target_store(
 
 
 def copy_attributes(
-    source: zarr.Group | zarr.Array, target: zarr.Group | zarr.Array
+    source: ZarrGroup | zarr.Array, target: ZarrGroup | zarr.Array
 ) -> None:
     """
     Copy all attributes from source to target.
@@ -94,7 +117,7 @@ def copy_attributes(
         target.attrs[key] = value
 
 
-def copy_group_recursive(source_group: zarr.Group, target_group: zarr.Group) -> None:
+def copy_group_recursive(source_group: ZarrGroup, target_group: ZarrGroup) -> None:
     """
     Recursively copy a group and all its contents to the target.
 
@@ -178,8 +201,8 @@ class AttributeMismatchError(GroupComparisonError):
 
 
 def deep_compare_groups(
-    group1: Group,
-    group2: Group,
+    group1: ZarrGroup,
+    group2: ZarrGroup,
     max_depth: Optional[int] = None,
     compare_values: bool = True,
     compare_attributes: bool = True,
@@ -213,7 +236,7 @@ def deep_compare_groups(
         If the groups are not equal, with detailed explanation of the failure.
     """
 
-    if not isinstance(group1, Group) or not isinstance(group2, Group):
+    if not isinstance(group1, ZarrGroup) or not isinstance(group2, ZarrGroup):
         raise TypeError(
             f"Function not available for types {type(group1)} and {type(group1)}."
         )
@@ -249,8 +272,8 @@ def deep_compare_groups(
                 f"Nodes do not match for key '{key1}': {node1} vs {node2}"
             )
 
-        if issubclass(node1_type, Array):
-            node1, node2 = cast(Array, node1), cast(Array, node2)
+        if issubclass(node1_type, ZarrArray):
+            node1, node2 = cast(ZarrArray, node1), cast(ZarrArray, node2)
             if node1.shape != node2.shape:
                 raise ArrayShapeMismatchError(
                     f"Array shapes do not match for key '{key1}': {node1.shape} vs {node2.shape}"
@@ -318,3 +341,153 @@ def compare_attrs(attr1: JSON, attr2: JSON) -> bool:
         return len(attr1) == len(attr2) and all(a == b for a, b in zip(attr1, attr2))
     else:
         return attr1 == attr2
+
+
+class TreeRepr:
+    """
+    A simple object with a tree-like repr for the Zarr Group.
+
+    Note that this object and it's implementation isn't considered part
+    of Zarr's public API.
+
+    Taken from https://github.com/zarr-developers/zarr-python/blob/main/src/zarr/core/_tree.py
+
+    The MIT License (MIT)
+
+    Copyright (c) 2015-2024 Zarr Developers <https://github.com/zarr-developers>
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+    """
+
+    def __init__(self, tree: rich.tree.Tree) -> None:
+        self._tree = tree
+
+    def __repr__(self) -> str:
+        color_system = os.environ.get(
+            "OVERRIDE_COLOR_SYSTEM", rich.get_console().color_system
+        )
+        console = rich.console.Console(file=io.StringIO(), color_system=color_system)  # type: ignore
+        console.print(self._tree)
+        _console_file = cast(io.StringIO, console.file)
+        return str(_console_file.getvalue())
+
+    def _repr_mimebundle_(
+        self,
+        include: Sequence[str],
+        exclude: Sequence[str],
+        **kwargs: Any,
+    ) -> dict[str, str]:
+        # For jupyter support.
+        # Unsure why mypy infers the return type to by Any
+        return self._tree._repr_mimebundle_(include=include, exclude=exclude, **kwargs)  # type: ignore[no-any-return]
+
+
+async def _group_tree_with_attrs_async(
+    group: AsyncGroup, max_depth: int | None = None, show_attrs: bool = True
+) -> TreeRepr:
+    """
+    Return a tree representation of the group.
+    Added some information in addition to the zarr-python function this was based on.
+
+
+    Adapted from https://github.com/zarr-developers/zarr-python/blob/main/src/zarr/core/_tree.py
+
+    The MIT License (MIT)
+
+    Copyright (c) 2015-2024 Zarr Developers <https://github.com/zarr-developers>
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+    Parameters
+    ----------
+    group
+        _description_
+    max_depth, optional
+        _description_, by default None
+    show_attrs, optional
+        _description_, by default True
+
+    Returns
+    -------
+        _description_
+    """
+    tree = rich.tree.Tree(label=f"[bold]{group.name}[/bold]")
+    nodes = {"": tree}
+    members = sorted([x async for x in group.members(max_depth=max_depth)])
+
+    for key, node in members:
+        if key.count("/") == 0:
+            parent_key = ""
+        else:
+            parent_key = key.rsplit("/", 1)[0]
+        parent = nodes[parent_key]
+
+        # We want what the spec calls the node "name", the part excluding all leading
+        # /'s and path segments. But node.name includes all that, so we build it here.
+        name = key.rsplit("/")[-1]
+        if isinstance(node, AsyncGroup):
+            label = f"[bold]{name}[/bold]"
+        else:
+            label = f"[bold]{name}[/bold] {node.shape} {node.dtype}"
+
+        node_tree = parent.add(label)
+
+        # Our addition to the zarr-python reference
+        if show_attrs and len(node.attrs) > 0:
+            attr_tree = node_tree.add("[italic][Attributes][/italic]")
+            for attr_key in node.attrs.keys():
+                attr_value = node.attrs[attr_key]
+                value_descr = type(attr_value)
+                if issubclass(value_descr, Iterable):
+                    value_descr = f"{value_descr} (length: {len(attr_value)})"  # type: ignore
+                attr_label = f"[italic]{attr_key}[/italic]: {value_descr}"
+                attr_tree.add(attr_label)
+
+        nodes[key] = node_tree
+
+    return TreeRepr(tree)
+
+
+async def group_tree_with_attrs_async(
+    group: AsyncGroup, max_depth: int | None = None, show_attrs: bool = True
+) -> TreeRepr:
+    return await _group_tree_with_attrs_async(
+        group=group, max_depth=max_depth, show_attrs=show_attrs
+    )
+
+
+def get_codec(id: str, *args, **kwargs):
+    return zarr.registry.get_codec_class(id)(*args, **kwargs)

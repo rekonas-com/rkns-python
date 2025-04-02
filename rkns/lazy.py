@@ -1,9 +1,10 @@
 from typing import Any, Tuple, TypeVar, Union, cast
 
 import numpy as np
-import zarr
 
-T = TypeVar("T", bound=Union[zarr.Array, np.ndarray])
+from rkns.util.zarr_util import ZarrArray
+
+T = TypeVar("T", bound=Union[ZarrArray, np.ndarray])
 
 
 class LazySignal:
@@ -16,14 +17,14 @@ class LazySignal:
     """
 
     def __init__(
-        self, source: zarr.Array | np.ndarray, _m: np.ndarray, _bias: np.ndarray
+        self, source: ZarrArray | np.ndarray, _m: np.ndarray, _bias: np.ndarray
     ):
         """
         Initialize the LazySignal with source data, scaling factors, and biases.
 
         Parameters
         ----------
-        source : zarr.Array or np.ndarray
+        source : ZarrArray or np.ndarray
             The underlying data array to be transformed.
         _m : np.ndarray
             Scaling factors of shape (1, n_channels).
@@ -116,7 +117,7 @@ class LazySignal:
     @classmethod
     def from_minmaxs(
         cls,
-        source: zarr.Array | np.ndarray,
+        source: ZarrArray | np.ndarray,
         pmin: np.ndarray,
         pmax: np.ndarray,
         dmin: np.ndarray,
@@ -127,7 +128,7 @@ class LazySignal:
 
         Parameters
         ----------
-        source : zarr.Array or np.ndarray
+        source : ZarrArray or np.ndarray
             The source data array.
         pmin : np.ndarray
             Physical minimum values.

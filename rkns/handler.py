@@ -1,19 +1,24 @@
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, cast
+from typing import TYPE_CHECKING, Any, Iterable, cast
 
 import zarr
 import zarr.storage
 from zarr.core.group import GroupMetadata
 
-from rkns.util import RKNSNodeNames, TreeRepr, group_tree_with_attrs_async
+from rkns.util import RKNSNodeNames
+from rkns.util.zarr_util import (
+    TreeRepr,
+    copy_group_recursive,
+    deep_compare_groups,
+    get_or_create_target_store,
+    group_tree_with_attrs_async,
+)
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from zarr.core.metadata import ArrayV2Metadata, ArrayV3Metadata
-
-    from rkns.util import TreeRepr
 
 
 class StoreHandler:
@@ -132,4 +137,32 @@ class StoreHandler:
             group_tree_with_attrs_async(
                 self.root._async_group, max_depth=max_depth, show_attrs=show_attrs
             )
+        )
+
+    def export_to_path_or_store(self, path_or_store: Any | Path | str):
+        target_store = get_or_create_target_store(path_or_store)
+        if isinstance(target_store, zarr.storage.ZipStore):
+            # The current Zarr implementation has issues with ZIP exports...
+            # That is, attributes are simply not written.
+            raise NotImplementedError()
+
+        try:
+            target_root = zarr.group(store=target_store, overwrite=True)
+            copy_group_recursive(self.root, target_root)
+        finally:
+            target_store.close()
+
+    def deep_compare(
+        self,
+        other: "StoreHandler",
+        max_depth: int | None = None,
+        compare_values: bool = True,
+        compare_attributes: bool = True,
+    ) -> bool:
+        return deep_compare_groups(
+            self.root,
+            other.root,
+            max_depth=max_depth,
+            compare_values=compare_values,
+            compare_attributes=compare_attributes,
         )
