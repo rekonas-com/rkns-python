@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from .zarr_util import ZarrGroup
+from rkns.zarr.zarr_util import ZarrGroup
 
 
 class RKNSNodeNames(str, Enum):

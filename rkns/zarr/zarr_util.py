@@ -10,14 +10,22 @@ import rich
 import rich.console
 import rich.tree
 import zarr
-import zarr.abc
 import zarr.abc.codec
-import zarr.codecs
 import zarr.registry
 import zarr.storage
 from zarr.abc.store import Store
 from zarr.core.attributes import Attributes
 from zarr.core.group import AsyncGroup
+
+from rkns.errors import (
+    ArrayShapeMismatchError,
+    ArrayValueMismatchError,
+    AttributeMismatchError,
+    GroupComparisonError,
+    MemberCountMismatchError,
+    NameMismatchError,
+    PathMismatchError,
+)
 
 # Handle ZarrGroup compatibility across versions
 try:
@@ -146,58 +154,6 @@ def copy_group_recursive(source_group: ZarrGroup, target_group: ZarrGroup) -> No
     for name, subgroup in source_group.groups():
         target_subgroup = target_group.create_group(name)
         copy_group_recursive(subgroup, target_subgroup)
-
-
-class RKNSParseError(Exception):
-    pass
-
-
-class GroupComparisonError(Exception):
-    """Base exception for group comparison failures."""
-
-    pass
-
-
-class NameMismatchError(GroupComparisonError):
-    """Raised when group names do not match."""
-
-    pass
-
-
-class MemberCountMismatchError(GroupComparisonError):
-    """Raised when the number of members in groups do not match."""
-
-    pass
-
-
-class PathMismatchError(GroupComparisonError):
-    """Raised when keys (paths) of members do not match."""
-
-    pass
-
-
-class ArrayShapeMismatchError(GroupComparisonError):
-    """Raised when array shapes do not match."""
-
-    pass
-
-
-class ArrayValueMismatchError(GroupComparisonError):
-    """Raised when array values do not match."""
-
-    pass
-
-
-class GroupPathMismatchError(GroupComparisonError):
-    """Raised when nested group names do not match."""
-
-    pass
-
-
-class AttributeMismatchError(GroupComparisonError):
-    """Raised when attributes do not match."""
-
-    pass
 
 
 def deep_compare_groups(

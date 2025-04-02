@@ -1,4 +1,3 @@
-
 import numpy as np
 import pytest
 import zarr
@@ -7,7 +6,7 @@ import zarr.storage
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
 from zarr.storage import LocalStore, MemoryStore
 
-from rkns.util.zarr_util import (
+from rkns.zarr.zarr_util import (
     ArrayShapeMismatchError,
     ArrayValueMismatchError,
     AttributeMismatchError,

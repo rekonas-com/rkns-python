@@ -10,14 +10,6 @@ from .rkns_util import (
     check_validity,
     get_freq_group,
 )
-from .zarr_util import (
-    RKNSParseError,
-    add_child_array,
-    copy_attributes,
-    copy_group_recursive,
-    deep_compare_groups,
-    get_or_create_target_store,
-)
 
 __all__ = [
     "cached_import",

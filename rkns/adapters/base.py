@@ -4,9 +4,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from rkns.file_formats import FileFormat
-from rkns.handler import StoreHandler
-
-from ..util.zarr_util import ZarrGroup
+from rkns.zarr.handler import StoreHandler
+from rkns.zarr.zarr_util import ZarrGroup
 
 __all__ = ["RKNSBaseAdapter"]
 

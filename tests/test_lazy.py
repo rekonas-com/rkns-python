@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
-import zarr
 
+import zarr
 from rkns.lazy import LazySignal
 
 

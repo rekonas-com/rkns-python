@@ -7,7 +7,7 @@ from rkns.util.misc import (
     check_open,
     import_from_string,
 )
-from rkns.util.zarr_util import (
+from rkns.zarr.zarr_util import (
     TreeRepr,
     _group_tree_with_attrs_async,
 )

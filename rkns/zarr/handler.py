@@ -7,7 +7,8 @@ import zarr.storage
 from zarr.core.group import GroupMetadata
 
 from rkns.util import RKNSNodeNames
-from rkns.util.zarr_util import (
+
+from .zarr_util import (
     TreeRepr,
     copy_group_recursive,
     deep_compare_groups,
