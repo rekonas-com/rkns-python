@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, Iterable, Optional, OrderedDict, cast
 
 import numpy as np
 
+from rkns._zarr import StoreHandler, ZarrArray
+from rkns._zarr.types import JSON
 from rkns.adapters.base import RKNSBaseAdapter
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
@@ -22,9 +24,6 @@ from rkns.util import (
     get_freq_group,
 )
 from rkns.version import __version__
-from rkns.zarr.handler import StoreHandler
-from rkns.zarr.types import JSON
-from rkns.zarr.zarr_util import ZarrArray
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from typing import Self
 
-    from rkns.zarr.zarr_util import TreeRepr
+    from rkns._zarr.utils_interface import TreeRepr
 
 
 @apply_check_open_to_all_methods

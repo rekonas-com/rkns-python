@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Mapping, Sequence
-from typing import Iterable, Literal
+from typing import TYPE_CHECKING, Iterable, Literal
 
 ############################################################
 # Types taken from zarr v3
@@ -15,3 +17,11 @@ NodeType = Literal["array", "group"]
 JSON = str | int | float | Mapping[str, "JSON"] | Sequence["JSON"] | None
 MemoryOrder = Literal["C", "F"]
 AccessModeLiteral = Literal["r", "r+", "a", "w", "w-"]
+
+if TYPE_CHECKING:
+    try:
+        # v3
+        from zarr.abc.codec import BaseCodec as CodecType  # type: ignore # noqa: F401
+    except ImportError:
+        # v2
+        from numcodecs.abc import Codec as CodecType  # type: ignore  # noqa: F401

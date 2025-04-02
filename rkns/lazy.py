@@ -2,7 +2,7 @@ from typing import Any, Tuple, TypeVar, Union, cast
 
 import numpy as np
 
-from rkns.zarr.zarr_util import ZarrArray
+from ._zarr import ZarrArray
 
 T = TypeVar("T", bound=Union[ZarrArray, np.ndarray])
 

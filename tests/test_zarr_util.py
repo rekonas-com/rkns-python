@@ -6,7 +6,15 @@ import zarr.storage
 from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
 from zarr.storage import LocalStore, MemoryStore
 
-from rkns.zarr.zarr_util import (
+from rkns._zarr import (
+    add_child_array,
+    compare_attrs,
+    copy_attributes,
+    copy_group_recursive,
+    deep_compare_groups,
+    get_or_create_target_store,
+)
+from rkns.errors import (
     ArrayShapeMismatchError,
     ArrayValueMismatchError,
     AttributeMismatchError,
@@ -14,12 +22,6 @@ from rkns.zarr.zarr_util import (
     MemberCountMismatchError,
     NameMismatchError,
     PathMismatchError,
-    add_child_array,
-    compare_attrs,
-    copy_attributes,
-    copy_group_recursive,
-    deep_compare_groups,
-    get_or_create_target_store,
 )
 
 

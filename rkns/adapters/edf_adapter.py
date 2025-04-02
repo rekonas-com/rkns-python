@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyedflib
 
+from rkns._zarr import ZarrGroup, add_child_array, get_codec
 from rkns.adapters.base import RKNSBaseAdapter
 from rkns.file_formats import FileFormat
 from rkns.util import RKNSNodeNames, get_freq_group
-from rkns.zarr.zarr_util import ZarrGroup, add_child_array, get_codec
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike

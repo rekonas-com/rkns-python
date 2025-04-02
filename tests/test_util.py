@@ -2,15 +2,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from rkns._zarr.utils_interface import TreeRepr
+from rkns._zarr.utils_zarr_v3 import _ZarrV3Utils
 from rkns.util.misc import (
     apply_check_open_to_all_methods,
     check_open,
     import_from_string,
 )
-from rkns.zarr.zarr_util import (
-    TreeRepr,
-    _group_tree_with_attrs_async,
-)
+
+_group_tree_with_attrs_async = _ZarrV3Utils._group_tree_with_attrs_async
 
 
 def test_import_from_string():
