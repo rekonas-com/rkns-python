@@ -1,12 +1,19 @@
-import numpy as np
 import pytest
 import zarr
-import zarr.codecs
-import zarr.storage
-from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
-from zarr.storage import LocalStore, MemoryStore
 
-from rkns._zarr import (
+# Skip the entire test module if Zarr is not version 3.x
+pytestmark = pytest.mark.skipif(
+    not zarr.__version__.startswith("2."), reason="Test requires Zarr v2.x"
+)
+
+
+import numpy as np  # noqa: E402
+import zarr.codecs  # noqa: E402
+import zarr.storage  # noqa: E402
+from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle  # noqa: E402
+from zarr.storage import LocalStore, MemoryStore  # noqa: E402
+
+from rkns._zarr import (  # noqa: E402
     add_child_array,
     compare_attrs,
     copy_attributes,
@@ -14,7 +21,7 @@ from rkns._zarr import (
     deep_compare_groups,
     get_or_create_target_store,
 )
-from rkns.errors import (
+from rkns.errors import (  # noqa: E402
     ArrayShapeMismatchError,
     ArrayValueMismatchError,
     AttributeMismatchError,
