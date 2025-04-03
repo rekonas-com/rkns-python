@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from ..file_formats import FileFormat
 
-if TYPE_CHECKING:
-    from zarr.storage import StoreLike
+# if TYPE_CHECKING:
+#     from zarr.storage import StoreLike
 
 
-def detect_format(path: StoreLike) -> FileFormat:
+def detect_format(path: Any | Path | str) -> FileFormat:
     """
     If the suffix in lowercase is ".edf", this function detects edf and edf+
     based on the first byte of the file.

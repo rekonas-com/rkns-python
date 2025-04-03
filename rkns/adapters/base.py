@@ -2,18 +2,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import cast
 
-import zarr
-import zarr.errors
-
+from rkns._zarr import ZarrGroup
+from rkns._zarr.storehandler_zarr_v3 import _StoreHandler
 from rkns.file_formats import FileFormat
-from rkns.handler import StoreHandler
 
-from ..util import RKNSNodeNames as Names
-from ..util import check_rkns_validity
-
-__all__ = ["RKNSBaseAdapter", "RKNSIdentityAdapter"]
+__all__ = ["RKNSBaseAdapter"]
 
 
 class RKNSBaseAdapter(ABC):
@@ -25,13 +19,13 @@ class RKNSBaseAdapter(ABC):
     Not technically an adapter in an object oriented sense, and more like a Data Converter.
     """
 
-    def __init__(self, handler: StoreHandler) -> None:
+    def __init__(self, handler: _StoreHandler) -> None:
         self._handler = handler
         super().__init__()
 
     def populate_raw_from_file(
         self, file_path: Path, file_format: FileFormat
-    ) -> zarr.Group:
+    ) -> ZarrGroup:
         # set attributes that are consistent across fileformats here.
         self._handler.raw.attrs["format"] = file_format.value
         return self._populate_raw_from_file(file_path, file_format)
@@ -39,7 +33,7 @@ class RKNSBaseAdapter(ABC):
     @abstractmethod
     def _populate_raw_from_file(
         self, file_path: Path, file_format: FileFormat
-    ) -> zarr.Group:
+    ) -> ZarrGroup:
         pass
 
     @abstractmethod
@@ -47,40 +41,39 @@ class RKNSBaseAdapter(ABC):
         self,
         overwrite_if_exists: bool = False,
         validate: bool = True,
-    ) -> zarr.Group:
+    ) -> ZarrGroup:
         pass
 
 
-class RKNSIdentityAdapter(RKNSBaseAdapter):
-    """
-    Identity adapter to be used for raw data that is already in the RKNS
-    format, i.e. if the _raw group node has a child group "rkns".
+# class RKNSIdentityAdapter(RKNSBaseAdapter):
+#     """
+#     Identity adapter to be used for raw data that is already in the RKNS
+#     format, i.e. if the _raw group node has a child group "rkns".
 
-    """
+#     """
 
-    def populate_rkns_from_raw(
-        self,
-        overwrite_if_exists: bool = False,
-        validate: bool = True,
-    ) -> zarr.Group:
-        try:
-            _raw_rkns = self._handler.raw
-        except KeyError as e:
-            raise ValueError(
-                f"Group {Names.rkns_root=} does not exist in the Zarr store."
-            ) from e
+#     def populate_rkns_from_raw(
+#         self,
+#         overwrite_if_exists: bool = False,
+#         validate: bool = True,
+#     ) -> ZarrGroup:
+#         try:
+#             _raw_rkns = self._handler.raw
+#         except KeyError as e:
+#             raise ValueError(
+#                 f"Group {Names.rkns_root=} does not exist in the Zarr store."
+#             ) from e
 
-        if validate:
-            try:
-                check_rkns_validity(_raw_rkns)
-            except Exception as e:
-                raise ValueError(
-                    f"Subgroup {Names.rkns_root=} is not in a valid format."
-                ) from e
+#         if validate:
+#             try:
+#                 check_rkns_validity(_raw_rkns)
+#             except Exception as e:
+#                 raise ValueError(
+#                     f"Subgroup {Names.rkns_root=} is not in a valid format."
+#                 ) from e
 
-        _raw_rkns = cast(zarr.Group, _raw_rkns)
+#         _raw_rkns = cast(ZarrGroup, _raw_rkns)
 
-        new_rkns_node = self._handler.create_group(path=Names.rkns_root)
-
-        zarr.copy_all(_raw_rkns, new_rkns_node)
-        return new_rkns_node
+#         new_rkns_node = self._handler.create_group(path=Names.rkns_root)
+#         zarr.copy_all(_raw_rkns, new_rkns_node)
+#         return new_rkns_node

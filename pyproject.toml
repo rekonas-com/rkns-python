@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rkns"
-version = "0.3.0"
+version = "0.3.1"
 description = "RKNS data format for ExG data"
 authors = ["Fabricio Arend Torres <fabricio.arendtorres[at]rekonas[dot]com>", "Patrick Kahr"]
 readme = "README.md"

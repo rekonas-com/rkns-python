@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
-import zarr
 
+import zarr
 from rkns.lazy import LazySignal
 
 
@@ -23,8 +23,8 @@ class TestLazySignal:
         source = zarr.array(np.random.rand(10, 20))
 
         class DummyIndexer(LazySignal):
-            def _transform(self, chunk, idx):
-                return chunk * 2
+            def _transform(self, data_slice, idx):
+                return data_slice * 2
 
         lazy = DummyIndexer(source, np.ones((1, 20)), np.ones((1, 20)))
         assert lazy.shape == (10, 20)
