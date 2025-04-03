@@ -50,6 +50,11 @@ class ZarrUtils(ABC):
 
     @staticmethod
     @abstractmethod
+    def update_attributes(node: ZarrGroup | ZarrArray, attribute_dict: dict):
+        raise NotImplementedError()
+
+    @staticmethod
+    @abstractmethod
     def get_or_create_target_store(
         path_or_store: Any | Path | str, mode: Literal["r", "w", "a"] = "w"
     ) -> Store:

@@ -405,7 +405,7 @@ class RKNSBuilder:
         )
 
         # hierarchy of top-level groups
-        self._handler.create_hierarchy(
+        tmp = self._handler.create_hierarchy(
             root_node=root,
             nodes=[
                 f"{RKNSNodeNames.raw_root.value}",
@@ -562,7 +562,6 @@ class RKNSBuilder:
         """
         file_path = Path(file_path)
         self._init_base_structure()
-
         Adapter = AdapterRegistry.get_adapter(file_format)
         adapter = Adapter(handler=self._handler)
         adapter.populate_raw_from_file(file_path, file_format)

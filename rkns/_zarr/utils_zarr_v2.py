@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Literal, cast
 
 import numpy as np
+import rich
+import rich.console
+import rich.tree
 import zarr.convenience
 import zarr.storage
 from zarr.attrs import Attributes
@@ -25,7 +28,7 @@ from .generics import ZarrArray, ZarrGroup
 from .types import JSON, CodecType, Store
 
 # handle codecs across version
-from .utils_interface import ZarrUtils
+from .utils_interface import TreeRepr, ZarrUtils
 
 if TYPE_CHECKING:
     from typing import TypeVar
@@ -109,6 +112,11 @@ class _ZarrV2Utils(ZarrUtils):
 
         if attributes is not None:
             zarr_array.attrs.update(**attributes)
+
+    @staticmethod
+    def update_attributes(node: ZarrGroup | ZarrArray, attribute_dict: dict):
+        # update_attributes(rkns_attributes)
+        node.attrs.update(**attribute_dict)
 
     @staticmethod
     def compare_attrs(attr1: JSON, attr2: JSON) -> bool:
@@ -293,3 +301,91 @@ class _ZarrV2Utils(ZarrUtils):
                     current_path=full_key,
                     current_depth=current_depth + 1,
                 )
+
+    @staticmethod
+    def group_tree_with_attrs(
+        group: ZarrGroup, max_depth: int | None = None, show_attrs: bool = True
+    ) -> TreeRepr:
+        """
+        Return a tree representation of the group.
+        Added some information in addition to the zarr-python function this was based on.
+
+
+        Adapted from https://github.com/zarr-developers/zarr-python/blob/main/src/zarr/core/_tree.py
+
+        The MIT License (MIT)
+
+        Copyright (c) 2015-2024 Zarr Developers <https://github.com/zarr-developers>
+
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+
+        Parameters
+        ----------
+        group
+            _description_
+        max_depth, optional
+            _description_, by default None
+        show_attrs, optional
+            _description_, by default True
+
+        Returns
+        -------
+            _description_
+        """
+        tree = rich.tree.Tree(label=f"[bold]{group.name}[/bold]")
+        nodes = {"": tree}
+        members = sorted(
+            [x for x in _ZarrV2Utils.iter_zarr_children(group, max_depth=max_depth)]
+        )
+
+        for key, node in members:
+            if key.count("/") == 0:
+                parent_key = ""
+            else:
+                parent_key = key.rsplit("/", 1)[0]
+            parent = nodes[parent_key]
+
+            # We want what the spec calls the node "name", the part excluding all leading
+            # /'s and path segments. But node.name includes all that, so we build it here.
+            name = key.rsplit("/")[-1]
+            if isinstance(node, zarr.Group):
+                label = f"[bold]{name}[/bold]"
+            else:
+                label = f"[bold]{name}[/bold] {node.shape} {node.dtype}"
+
+            node_tree = parent.add(label)
+
+            # Our addition to the zarr-python reference
+            if show_attrs and len(node.attrs) > 0:
+                attr_tree = node_tree.add("[italic][Attributes][/italic]")
+                for attr_key in node.attrs.keys():
+                    attr_value = node.attrs[attr_key]
+                    value_descr = type(attr_value)
+                    if issubclass(value_descr, Iterable):
+                        value_descr = f"{value_descr} (length: {len(attr_value)})"  # type: ignore
+                    attr_label = f"[italic]{attr_key}[/italic]: {value_descr}"
+                    attr_tree.add(attr_label)
+
+            nodes[key] = node_tree
+
+        return TreeRepr(tree)
+
+    @staticmethod
+    def get_codec(id: str, **kwargs) -> CodecType:
+        return cast(CodecType, zarr.get_codec({"id": id, **kwargs}))
