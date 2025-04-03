@@ -3,8 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from rkns._zarr import ZarrGroup
-from rkns._zarr.storehandler_zarr_v3 import _StoreHandler
+from rkns._zarr import StoreHandler, ZarrGroup
 from rkns.file_formats import FileFormat
 
 __all__ = ["RKNSBaseAdapter"]
@@ -19,7 +18,7 @@ class RKNSBaseAdapter(ABC):
     Not technically an adapter in an object oriented sense, and more like a Data Converter.
     """
 
-    def __init__(self, handler: _StoreHandler) -> None:
+    def __init__(self, handler: StoreHandler) -> None:
         self._handler = handler
         super().__init__()
 

@@ -2,9 +2,11 @@ import pytest
 import zarr
 
 # Skip the entire test module if Zarr is not version 3.x
-pytestmark = pytest.mark.skipif(
-    not zarr.__version__.startswith("3."), reason="Test requires Zarr v3.x"
-)
+
+# Skip the entire module if Zarr is not version 3.x
+if not zarr.__version__.startswith("3."):
+    pytest.skip("Test requires Zarr v3.x", allow_module_level=True)
+
 from unittest.mock import AsyncMock, MagicMock  # noqa: E402
 
 import numpy as np  # noqa: E402
