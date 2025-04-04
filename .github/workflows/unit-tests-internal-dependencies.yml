@@ -64,12 +64,8 @@ jobs:
     
     - name: Update zarr dependency specification
       run: |
-        poetry remove zarr
-        poetry add "${{ matrix.zarr-version }}"
-        poetry remove rich
-        poetry add "${{ matrix.rich-version }}"
-        poetry remove numpy
-        poetry add "${{ matrix.numpy-version }}"
+        poetry remove zarr rich numpy
+        poetry add ${{ matrix.zarr-version }} ${{ matrix.rich-version }} ${{ matrix.numpy-version }}
         
     - name: Install dependencies from scratch
       run: |
