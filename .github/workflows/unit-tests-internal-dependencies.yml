@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.13"]
         zarr-version: ["zarr 2.18.3"]
         rich-version: ["rich 13.7.1"]
         numpy-version: ["numpy 2.0.2"]
