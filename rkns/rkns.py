@@ -4,31 +4,25 @@ import datetime
 import logging
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, cast
+from types import EllipsisType
+from typing import TYPE_CHECKING, Any, Iterable, Optional, OrderedDict, cast
 
 import numpy as np
-import zarr
-import zarr.core
-import zarr.core.common
-import zarr.core.group
-import zarr.errors
-import zarr.storage
 
+from rkns._zarr import StoreHandler, ZarrArray
+from rkns._zarr.types import JSON
 from rkns.adapters.base import RKNSBaseAdapter
 from rkns.adapters.registry import AdapterRegistry
 from rkns.detectors.registry import FileFormatRegistry
+from rkns.errors import RKNSParseError
 from rkns.file_formats import FileFormat
-from rkns.handler import StoreHandler
+from rkns.lazy import LazySignal
 from rkns.util import (
     RKNSNodeNames,
-    RKNSParseError,
     apply_check_open_to_all_methods,
     check_validity,
-    copy_group_recursive,
     get_freq_group,
-    get_or_create_target_store,
 )
-from rkns.util.zarr_util import deep_compare_groups
 from rkns.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -37,10 +31,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from typing import Self
 
-    from zarr.abc.store import Store
-    from zarr.storage import StoreLike
-
-    from rkns.util import TreeRepr
+    from rkns._zarr.utils_interface import TreeRepr
 
 
 @apply_check_open_to_all_methods
@@ -55,15 +46,15 @@ class RKNS:
         self.adapter = adapter
 
     @property
-    def patient_info(self) -> zarr.core.common.JSON:
+    def patient_info(self) -> JSON:
         return self.handler.rkns.attrs["patient_info"]
 
     @property
-    def admin_info(self) -> zarr.core.common.JSON:
+    def admin_info(self) -> JSON:
         return self.handler.rkns.attrs["admin_info"]
 
     @property
-    def channel_info(self) -> zarr.core.common.JSON:
+    def channel_info(self) -> JSON:
         return self.handler.rkns.attrs["channel_info"]
 
     def get_channel_names(self) -> list[str]:
@@ -74,40 +65,204 @@ class RKNS:
 
     def get_frequency_by_channel(self, channel_name: str) -> float:
         fg = self._get_frequencygroup(channel_name)
-        return self.handler.signals[fg].attrs["sfreq_Hz"]  # type: ignore
+        return cast(float, self.handler.signals[fg].attrs["sfreq_Hz"])
 
-    def get_signal_by_freq(self, frequency: float) -> np.ndarray:
+    def _get_signal_by_freq(self, frequency: float) -> LazySignal:
         return self._get_signal_by_fg(get_freq_group(frequency))
 
-    def get_signal_by_channel(
+    def get_signal(
         self,
-        channel: str,
-    ):
-        raise NotImplementedError("...")
+        channels: str | Iterable[str] | None = None,
+        sfreq_Hz: float | None = None,
+        time_range: tuple[float, float] = (0, np.inf),
+    ) -> np.ndarray:
+        """Get signal data for specified channels or frequency group.
 
-    def get_duration(self) -> float:
+        Parameters
+        ----------
+        channels
+            Channel name(s) to retrieve. Mutually exclusive with `sfreq_Hz`.
+        sfreq_Hz
+            Sampling frequency in Hz to retrieve. Mutually exclusive with `channels`.
+        time_range : tuple[float, float], optional
+            Time range in seconds to retrieve, by default (0, inf), i.e. the whole time frame.
+            The time is with respect to the record duration.
+
+        Returns
+        -------
+            Signal data array for the specified parameters.
+
+        Raises
+        ------
+        ValueError
+            If both channels and frequency are specified, or neither is specified.
+            If specified channels belong to different frequency groups.
+        """
+        if channels is not None and sfreq_Hz is not None:
+            raise ValueError("Specify either channels or frequency, not both.")
+        elif channels is None and sfreq_Hz is None:
+            raise ValueError("Specify one of either channels or frequency.")
+        elif channels is None and sfreq_Hz is not None:
+            sfreq_Hz = cast(float, sfreq_Hz)
+            fg = get_freq_group(sfreq_Hz)
+
+        elif channels is not None and sfreq_Hz is None:
+            if isinstance(channels, str):
+                channels = [channels]
+
+            fgs = {self._get_frequencygroup(c) for c in channels}
+            if len(fgs) != 1:
+                raise ValueError("Channels must belong to the same frequency group.")
+            fg = next(iter(fgs))
+            sfreq_Hz = cast(float, self.handler.signals[fg].attrs["sfreq_Hz"])
+        else:
+            # Unnecessary but helps pylance.
+            raise RuntimeError("Unreachable code reached..")
+
+        row_idx = self.__build_row_idx_from_timerange(
+            sfreq_Hz=sfreq_Hz, time_range=time_range
+        )
+        col_idx = self.__build_col_idx_from_channels(
+            channels=channels, frequency_group=fg
+        )
+        return self._get_signal_by_fg(fg)[row_idx, col_idx]
+
+    def __build_row_idx_from_timerange(
+        self,
+        sfreq_Hz: float,
+        time_range: tuple[float, float] = (0, np.inf),
+    ):
+        """
+        Build a row index slice from a given time range for samples with the given sampling frequency.
+
+        Parameters
+        ----------
+        sfreq_Hz : float
+            Sampling frequency in Hz.
+        time_range : tuple[float, float]
+            Time range in seconds (start, end). If `None`, defaults to (0, inf).
+
+        Returns
+        -------
+        slice
+            Slice object representing the row indices corresponding to the time range.
+
+        Raises
+        ------
+        ValueError
+            If the end time is not larger than the start time.
+        """
+        if time_range[0] is None:
+            time_range[0] = 0
+
+        if time_range[1] is None:
+            time_range[1] = np.inf
+
+        if time_range[1] <= time_range[0]:
+            raise ValueError(
+                " Invalid time range: {time_range=}. "
+                + "End time must be larger than start time."
+            )
+
+        start_idx = int(time_range[0] * sfreq_Hz)
+        end_time = min(time_range[0] + self.get_recording_duration(), time_range[1])
+        end_idx = int(end_time * sfreq_Hz)
+        return slice(start_idx, end_idx)
+
+    def __build_col_idx_from_channels(
+        self, channels: Iterable[str] | None, frequency_group: str
+    ) -> list[int] | EllipsisType:
+        """
+        Convert channel names to their corresponding column indices for a given frequency group.
+
+        Parameters
+        ----------
+        channels
+            List of channel names to convert to indices. If None, returns `...` (Ellipsis)
+            to indicate all channels should be selected.
+        frequency_group
+            The frequency group to which the channels belong.
+
+        Returns
+        -------
+            List of column indices corresponding to the given channels, or `...` if no channels are specified.
+        """
+        if channels is None:
+            return ...
+        channel_to_index = self.get_channel_order(frequency_group=frequency_group)
+        index_order = [channel_to_index[channel] for channel in channels]
+        return index_order
+
+    def get_channel_order(
+        self, frequency_group: str | None = None, sfreq_in_Hz: float | None = None
+    ) -> OrderedDict[str, int]:
+        """
+        Get the order in which the channels are stored for a given frequency (in Hz) or frequency group.
+        Return an ordered dictionary, with the items corresponding to the channel names,
+        and the values correspond to their column index in the underlying zarr store.
+        This order corresponds to the one you obtain when querying ALL channels of a group with `get_signal`.
+
+        Note that channels are always grouped with other channels of similar frequency.
+
+        The order of the items corresponds to the index.
+        E.g. the returned OrderedDict could look like {"F1":0, "F2": 1, "F3":2, ...}
+
+        Parameters
+        ----------
+        frequency_group, optional
+            Specify the wanted frequency_group, by default None
+        sfreq_in_Hz, optional
+            Specify the wanted frequency in Hz, by default None
+
+        Returns
+        -------
+            An OrderedDict mapping the channel name to its column index in the stored array.
+
+        """
+        if frequency_group is not None and sfreq_in_Hz is not None:
+            raise ValueError("Specify either frequency or frequency_group, not both.")
+        elif frequency_group is None and sfreq_in_Hz is None:
+            raise ValueError("Specify one of either frequency or frequency_group.")
+        elif sfreq_in_Hz is not None:
+            frequency_group = get_freq_group(freq_in_Hz=sfreq_in_Hz)
+        else:
+            frequency_group = cast(str, frequency_group)
+        channel_names_ordered = self.handler.get_channels_by_fg(frequency_group)
+        channel_to_index = OrderedDict(
+            (item, idx) for idx, item in enumerate(channel_names_ordered)
+        )
+        return channel_to_index
+
+    def get_recording_duration(self) -> float:
+        """
+        Return duration of the recording in seconds.
+
+        Returns
+        -------
+            Duration in seconds.
+        """
         return self.admin_info["recording_duration_in_s"]  # type: ignore
 
     def get_recording_start(self) -> datetime.datetime:
         return datetime.datetime.fromisoformat(self.admin_info["recording_date"])  # type: ignore
 
-    def _get_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _get_signal_by_fg(self, frequency_group: str) -> LazySignal:
         digital_signal = self._get_digital_signal_by_fg(frequency_group=frequency_group)
         pminmax_dminmax = self._pminmax_dminmax_by_fg(frequency_group=frequency_group)
 
-        # NOTE: Important to cast here: Number might and probably is twice as large as np.int16
-        pmin = pminmax_dminmax[[0]]
-        pmax = pminmax_dminmax[[1]]
-        dmin = pminmax_dminmax[[2]]
-        dmax = pminmax_dminmax[[3]]
-        m = (pmax - pmin) / (dmax - dmin)
-        bias = pmax / m - dmax
-        return m * (digital_signal + bias)
+        l_signal = LazySignal.from_minmaxs(
+            digital_signal,
+            pmin=cast(np.ndarray, pminmax_dminmax[[0]]),
+            pmax=cast(np.ndarray, pminmax_dminmax[[1]]),
+            dmin=cast(np.ndarray, pminmax_dminmax[[2]]),
+            dmax=cast(np.ndarray, pminmax_dminmax[[3]]),
+        )
+        return l_signal
 
-    def _get_digital_signal_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _get_digital_signal_by_fg(self, frequency_group: str) -> ZarrArray:
         return self.handler.signals[frequency_group][RKNSNodeNames.rkns_signal.value]  # type: ignore
 
-    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> np.ndarray:
+    def _pminmax_dminmax_by_fg(self, frequency_group: str) -> ZarrArray:
         return self.handler.signals[frequency_group][
             RKNSNodeNames.rkns_signal_minmaxs.value
         ]  # type: ignore
@@ -126,15 +281,14 @@ class RKNS:
         compare_values: bool = True,
         compare_attributes: bool = True,
     ) -> bool:
-        return deep_compare_groups(
-            self.handler.root,
-            other.handler.root,
+        return self.handler.deep_compare(
+            other.handler,
             max_depth=max_depth,
             compare_values=compare_values,
             compare_attributes=compare_attributes,
         )
 
-    def export(self, path_or_store: Store | Path | str) -> None:
+    def export(self, path_or_store: Any | Path | str) -> None:
         """
         Export the RKNS object to a new store, creating a deep copy of all data.
         NOTE: This is a temporary solution, as in the future zarr.copy_all should be available.
@@ -155,18 +309,8 @@ class RKNS:
         This creates a complete copy of the entire RKNS structure, including
         all arrays, groups and their metadata.
         """
-        target_store = get_or_create_target_store(path_or_store)
 
-        if isinstance(target_store, zarr.storage.ZipStore):
-            # The current Zarr implementation has issues with ZIP exports...
-            # That is, attributes are simply not written.
-            raise NotImplementedError()
-
-        try:
-            target_root = zarr.group(store=target_store, overwrite=True)
-            copy_group_recursive(self.handler.root, target_root)
-        finally:
-            target_store.close()
+        self.handler.export_to_path_or_store(path_or_store)
 
     def get_fileformat_of_raw_signal(self) -> FileFormat:
         _raw_signal = self.handler.raw[RKNSNodeNames.raw_signal.value]
@@ -176,9 +320,9 @@ class RKNS:
     @classmethod
     def from_file(
         cls,
-        file_path: StoreLike,
+        file_path: Any,
         populate_from_raw: bool = True,
-        target_store: StoreLike | None = None,
+        target_store: Any | None = None,
     ) -> "RKNS":
         """
         Convenience method to create an RKNS instance from a file.
@@ -244,7 +388,7 @@ class RKNS:
 
 
 class RKNSBuilder:
-    def __init__(self, store: StoreLike | None = None):
+    def __init__(self, store: Any | None = None):
         self._handler = StoreHandler(store)
 
     def _init_base_structure(self) -> None:
@@ -282,7 +426,7 @@ class RKNSBuilder:
 
     def from_file(
         self,
-        file_path: StoreLike,
+        file_path: Any,
         populate_from_raw: bool = True,
     ) -> RKNS:
         """
@@ -331,7 +475,7 @@ class RKNSBuilder:
 
     def from_existing_rkns_store(
         self,
-        store: zarr.storage.StoreLike,
+        store: Any,
         validate: bool = True,
     ) -> RKNS:
         """
@@ -418,7 +562,6 @@ class RKNSBuilder:
         """
         file_path = Path(file_path)
         self._init_base_structure()
-
         Adapter = AdapterRegistry.get_adapter(file_format)
         adapter = Adapter(handler=self._handler)
         adapter.populate_raw_from_file(file_path, file_format)

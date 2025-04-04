@@ -1,0 +1,83 @@
+name: Python Tests (Internal Dependencies)
+# Just an extra for currently used internal dependencies
+# Will be removed later on and _not_ be a blocking point for progress.
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+
+# interrupt earlier tests if one quickly pushes multiple times..
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+        zarr-version: ["zarr==2.18.3"]
+        rich-version: ["rich==13.7.1"]
+        numpy-version: ["numpy==2.0.2"]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache test files
+      id: cache-test-files
+      uses: actions/cache@v3
+      with:
+        path: tests/files
+        # Using a versioned key allows you to invalidate cache when test files change
+        key: test-files-v1
+        
+    - name: Download test files if not cached
+      if: steps.cache-test-files.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p tests/files
+        # Download the test file
+        wget -q "https://www.teuniz.net/edf_bdf_testfiles/test_generator.zip" -O test_generator.zip 
+        unzip -q test_generator.zip -d test_generator
+        # Find and move the test_file.edf to the correct location
+        find test_generator -name "*.edf" -exec cp {} tests/files/test_file.edf \;
+        # Clean up
+        rm -rf test_generator test_generator.zip
+        # Verify file exists
+        if [ ! -f tests/files/test_file.edf ]; then
+          echo "Error: Could not find or create test_file.edf"
+          exit 1
+        fi
+    
+    - name: Update zarr dependency specification
+      run: |
+        # Explicitly remove the lock file to ensure fresh dependency resolution for each Python version
+        rm -f poetry.lock
+        poetry remove zarr rich numpy
+        poetry add ${{ matrix.zarr-version }} ${{ matrix.rich-version }} ${{ matrix.numpy-version }}
+        
+    - name: Install dependencies from scratch
+      run: |
+        poetry install --with dev,test --no-interaction --no-cache
+        
+    - name: Run tests
+      run: |
+        poetry run pytest tests/ 
+        
+    # - name: Upload coverage to Codecov
+    #   uses: codecov/codecov-action@v3
+    #   with:
+    #     file: ./coverage.xml
+    #     fail_ci_if_error: false

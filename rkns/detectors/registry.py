@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from rkns.util import import_from_string
 
@@ -10,9 +11,7 @@ from ..file_formats import FileFormat
 if TYPE_CHECKING:
     from typing import Callable
 
-    from zarr.storage import StoreLike
-
-    FileFormatDetector = Callable[[StoreLike], FileFormat]
+    FileFormatDetector = Callable[[Path | str | Any], FileFormat]
 
 
 __all__ = ["FileFormatRegistry"]
@@ -74,7 +73,7 @@ class FileFormatRegistry:
         return import_from_string(detector_path)
 
     @classmethod
-    def detect_fileformat(cls, file_path: StoreLike) -> FileFormat:
+    def detect_fileformat(cls, file_path: Path | str | Any) -> FileFormat:
         """
         Detect the file format by iterating through all registered
         detector function until a match is found.

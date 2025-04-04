@@ -1,10 +1,8 @@
 import hashlib
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
-import zarr
 
 from rkns.rkns import RKNS
 from rkns.util import RKNSNodeNames

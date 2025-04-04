@@ -1,33 +1,33 @@
 [tool.poetry]
 name = "rkns"
-version = "0.3.0"
+version = "0.4.0"
 description = "RKNS data format for ExG data"
 authors = ["Fabricio Arend Torres <fabricio.arendtorres[at]rekonas[dot]com>", "Patrick Kahr"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
-zarr = ">=3"
-pyEDFlib = "^0.1.37"
-numpy = "^1.26.4"
-minio = "^7.2.7"
-rich = "^13.9.4"
+python = ">=3.11"
+zarr = ">=2"
+pyEDFlib = "^0.1"
+numpy = ">=2" # 2.0.2
+minio = "^7.2" 
+rich = "^13.9" # 13.7.1
 
 [tool.poetry.group.test.dependencies]  
-pytest-asyncio = ">=0.25.3"
-pytest-mock = ">=3.14.0"
-pytest-cov = ">=6.0.0"
-pytest = ">=8.3.5"
+pytest-asyncio = ">=0.25"
+pytest-mock = ">=3.14"
+pytest-cov = ">=6.0"
+pytest = ">=8.3"
 
 
 [tool.poetry.group.dev.dependencies]
-ipdb = "^0.13.13"
-ruff = ">=0.9.10"
+ipdb = ">=0.13"
+ruff = ">=0.9"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.ruff]
+#[tool.ruff]
 # Exclude tests directory from linting
-exclude = ["tests/"]
+#exclude = ["tests/"]

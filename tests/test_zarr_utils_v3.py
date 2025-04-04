@@ -1,24 +1,19 @@
-from typing import Iterable
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import numpy as np
 import pytest
 import zarr
-import zarr.codecs
-import zarr.storage
-from zarr import AsyncGroup
-from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle
-from zarr.storage import LocalStore, MemoryStore
 
-from rkns.util.zarr_util import (
-    ArrayShapeMismatchError,
-    ArrayValueMismatchError,
-    AttributeMismatchError,
-    GroupComparisonError,
-    GroupPathMismatchError,
-    MemberCountMismatchError,
-    NameMismatchError,
-    PathMismatchError,
+# Skip the entire module if Zarr is not version 3.x
+if not zarr.__version__.startswith("3."):
+    pytest.skip("Test requires Zarr v3.x", allow_module_level=True)
+
+from unittest.mock import AsyncMock, MagicMock  # noqa: E402
+
+import numpy as np  # noqa: E402
+import zarr.codecs  # noqa: E402
+import zarr.storage  # noqa: E402
+from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle  # noqa: E402
+from zarr.storage import LocalStore, MemoryStore  # noqa: E402
+
+from rkns._zarr import (  # noqa: E402
     add_child_array,
     compare_attrs,
     copy_attributes,
@@ -26,6 +21,19 @@ from rkns.util.zarr_util import (
     deep_compare_groups,
     get_or_create_target_store,
 )
+from rkns._zarr.utils_interface import TreeRepr  # noqa: E402
+from rkns._zarr.utils_zarr_v3 import _ZarrV3Utils  # noqa: E402
+from rkns.errors import (  # noqa: E402
+    ArrayShapeMismatchError,
+    ArrayValueMismatchError,
+    AttributeMismatchError,
+    GroupComparisonError,
+    MemberCountMismatchError,
+    NameMismatchError,
+    PathMismatchError,
+)
+
+_group_tree_with_attrs_async = _ZarrV3Utils._group_tree_with_attrs_async
 
 
 @pytest.fixture
@@ -402,8 +410,8 @@ def test_deep_compare_async_groups_path_mismatch():
 def test_deep_compare_async_groups_array_shape_mismatch():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    arr1 = mock_group1.create_array("array1", dtype=np.float32, shape=(3,))
-    arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    mock_group1.create_array("array1", dtype=np.float32, shape=(3,))
+    mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(ArrayShapeMismatchError):
         deep_compare_groups(mock_group1, mock_group2)
@@ -439,10 +447,10 @@ def test_deep_compare_async_groups_root_name_mismatch():
     mock_group1 = generate_group("a")
     mock_group2 = generate_group("a")
     sg1 = mock_group1.create_group("subgroup1")
-    ssg1 = sg1.create_group("grandchild")
+    sg1.create_group("grandchild")
 
     sg2 = mock_group2.create_group("subgroup2")
-    ssg2 = sg2.create_group("grandchild")
+    sg2.create_group("grandchild")
     with pytest.raises(PathMismatchError):
         deep_compare_groups(mock_group1, mock_group2)
 
@@ -451,10 +459,10 @@ def test_deep_compare_async_groups_same_tree():
     mock_group1 = generate_group("a")
     mock_group2 = generate_group("a")
     sg1 = mock_group1.create_group("subgroup1")
-    ssg1 = sg1.create_group("grandchild")
+    sg1.create_group("grandchild")
 
     sg2 = mock_group2.create_group("subgroup1")
-    ssg2 = sg2.create_group("grandchild")
+    sg2.create_group("grandchild")
     deep_compare_groups(mock_group1, mock_group2)
 
 
@@ -476,8 +484,8 @@ def test_deep_compare_async_groups_attribute_mismatch():
 def test_deep_compare_async_groups_array_and_group():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    arr1 = mock_group1.create_group("abca")
-    arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    mock_group1.create_group("abca")
+    mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(GroupComparisonError):
         deep_compare_groups(mock_group1, mock_group2)
@@ -486,3 +494,91 @@ def test_deep_compare_async_groups_array_and_group():
 def test_deep_compare_notgroups():
     with pytest.raises(TypeError):
         deep_compare_groups({}, {})  # type: ignore
+
+
+class TestTreeOverview:
+    """
+    1. `test_group_tree_with_attrs_async_basic`:
+    Verifies that the function correctly generates a tree representation with basic attributes.
+    2. `test_group_tree_with_attrs_async_with_attributes`:
+    Checks that the function includes nested attributes in the tree representation.
+    3. `test_group_tree_with_attrs_async_no_attributes`:
+    Ensures that the function excludes attributes from the tree representation when `show_attrs` is set to `False`.
+
+    Each test uses mock objects to simulate the behavior of the `_group_tree_with_attrs_async` function and asserts that the generated tree representation contains the expected information.
+    """
+
+    @pytest.mark.asyncio
+    async def test_group_tree_with_attrs_async_basic(self):
+        mock_group = AsyncMock()
+        mock_group.name = "root"
+
+        async def mock_members(max_depth=None):
+            yield "child", MagicMock(shape=(10,), dtype="int32", attrs={})
+
+        mock_group.members = mock_members
+
+        tree_repr = await _group_tree_with_attrs_async(
+            mock_group, max_depth=None, show_attrs=True
+        )
+
+        assert isinstance(tree_repr, TreeRepr)
+        assert "root" in repr(tree_repr)
+        assert "child" in repr(tree_repr)
+        assert "(10,)" in repr(tree_repr)
+        assert "int32" in repr(tree_repr)
+
+        assert "[Attributes]" not in repr(tree_repr)
+        assert "length" not in repr(tree_repr)
+
+    @pytest.mark.asyncio
+    async def test_group_tree_with_attrs_async_with_attributes(self):
+        mock_group = AsyncMock()
+        mock_group.name = "root"
+
+        async def mock_members(max_depth=None):
+            yield (
+                "child",
+                MagicMock(
+                    shape=(10,),
+                    dtype="int32",
+                    attrs={"key": {"morekeys": "morevalues"}},
+                ),
+            )
+
+        mock_group.members = mock_members
+
+        tree_repr = await _group_tree_with_attrs_async(
+            mock_group, max_depth=None, show_attrs=True
+        )
+
+        assert isinstance(tree_repr, TreeRepr)
+        assert "root" in repr(tree_repr)
+        assert "child" in repr(tree_repr)
+        assert "(10,)" in repr(tree_repr)
+        assert "int32" in repr(tree_repr)
+        assert "key" in repr(tree_repr)
+        assert "[Attributes]" in repr(tree_repr)
+        assert "length" in repr(tree_repr)
+
+    @pytest.mark.asyncio
+    async def test_group_tree_with_attrs_async_no_attributes(self):
+        mock_group = AsyncMock()
+        mock_group.name = "root"
+
+        async def mock_members(max_depth=None):
+            yield "child", MagicMock(shape=(10,), dtype="int32", attrs={})
+
+        mock_group.members = mock_members
+
+        tree_repr = await _group_tree_with_attrs_async(
+            mock_group, max_depth=None, show_attrs=False
+        )
+
+        assert isinstance(tree_repr, TreeRepr)
+        assert "root" in repr(tree_repr)
+        assert "child" in repr(tree_repr)
+        assert "(10,)" in repr(tree_repr)
+        assert "int32" in repr(tree_repr)
+        assert "[Attributes]" not in repr(tree_repr)
+        assert "length" not in repr(tree_repr)
