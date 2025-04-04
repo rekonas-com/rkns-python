@@ -29,6 +29,26 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+
+    - name: Cache test files
+      id: cache-test-files
+      uses: actions/cache@v3
+      with:
+        path: tests/files
+        # Using a versioned key allows you to invalidate cache when test files change
+        key: test-files-v1
+         
+    - name: Download test files if not cached
+      if: steps.cache-test-files.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p tests/files
+        # Download the test file
+        wget -q "https://www.teuniz.net/edf_bdf_testfiles/test_generator.zip" -O test_generator.zip 
+        unzip -q test_generator.zip -d test_generator
+        # Move the needed file (adjust path as needed)
+        mv test_generator/[appropriate_file].edf tests/files/test_file.edf
+        # Clean up
+        rm -rf test_generator test_generator.zip
     
     - name: Update zarr dependency specification
       run: |
