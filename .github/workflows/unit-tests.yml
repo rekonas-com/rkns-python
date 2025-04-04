@@ -20,7 +20,7 @@ jobs:
             echo "python-versions=['3.11', '3.12', '3.13']" >> $GITHUB_OUTPUT
             echo "zarr-versions=['zarr ^2', 'zarr ^3']" >> $GITHUB_OUTPUT
           else
-            # For other branches, just test with latest Python and Zarr
+            # For other branches, just test with latest Python and Zar
             echo "python-versions=['3.11']" >> $GITHUB_OUTPUT
             echo "zarr-versions=['zarr ^3', 'zarr ^v3']" >> $GITHUB_OUTPUT
           fi
