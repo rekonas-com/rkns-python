@@ -3,10 +3,10 @@ from typing import cast
 import pytest
 import zarr
 
-# Skip the entire test module if Zarr is not version 3.x
-pytestmark = pytest.mark.skipif(
-    not zarr.__version__.startswith("2."), reason="Test requires Zarr v2.x"
-)
+# Skip the entire module if Zarr is not version 2.x
+if not zarr.__version__.startswith("2."):
+    pytest.skip("Test requires Zarr v2.x", allow_module_level=True)
+
 
 import numpy as np  # noqa: E402
 import zarr.codecs  # noqa: E402

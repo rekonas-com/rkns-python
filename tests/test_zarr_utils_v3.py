@@ -1,8 +1,6 @@
 import pytest
 import zarr
 
-# Skip the entire test module if Zarr is not version 3.x
-
 # Skip the entire module if Zarr is not version 3.x
 if not zarr.__version__.startswith("3."):
     pytest.skip("Test requires Zarr v3.x", allow_module_level=True)
