@@ -8,9 +8,13 @@ on:
   pull_request:
     branches: [ main, dev ]
 
+# interrupt earlier tests if one quickly pushes multiple times..
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    needs: determine-matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
