@@ -1,0 +1,52 @@
+name: Python Tests
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"] ## , "3.12", "3.13"]
+        zarr-version: ["zarr ^2", "zarr ^3"]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Update zarr dependency specification
+      run: |
+        poetry remove zarr
+        poetry add "${{ matrix.zarr-version }}"
+        
+    - name: Install dependencies from scratch
+      run: |
+        # Explicitly remove the lock file to ensure fresh dependency resolution for each Python version
+        rm -f poetry.lock
+        poetry install --with dev,test --no-interaction --no-cache
+        
+    - name: Run tests
+      run: |
+        poetry run pytest tests/ 
+        
+    # - name: Upload coverage to Codecov
+    #   uses: codecov/codecov-action@v3
+    #   with:
+    #     file: ./coverage.xml
+    #     fail_ci_if_error: false
