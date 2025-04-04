@@ -11,12 +11,12 @@ pytestmark = pytest.mark.skipif(
 import numpy as np  # noqa: E402
 import zarr.codecs  # noqa: E402
 import zarr.storage  # noqa: E402
-from numcodecs import Blosc
+from numcodecs import Blosc  # noqa: E402
 
 # from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle  # noqa: E402
-from zarr.storage import (
-    DirectoryStore,  # noqa: E402
-    MemoryStore,  # noqa: E402
+from zarr.storage import (  # noqa: E402
+    DirectoryStore,
+    MemoryStore,
 )
 
 from rkns._zarr import (  # noqa: E402

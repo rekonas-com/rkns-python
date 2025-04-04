@@ -71,8 +71,7 @@ class _ZarrV3Utils(ZarrUtils):
 
     @staticmethod
     def update_attributes(node: ZarrGroup | ZarrArray, attribute_dict: dict):
-        node.update_attributes(rkns_attributes)
-        # node.attrs.update(**attribute_dict)
+        node.update_attributes(attribute_dict)
 
     @staticmethod
     def get_or_create_target_store(

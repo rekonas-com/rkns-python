@@ -405,7 +405,7 @@ class RKNSBuilder:
         )
 
         # hierarchy of top-level groups
-        tmp = self._handler.create_hierarchy(
+        self._handler.create_hierarchy(
             root_node=root,
             nodes=[
                 f"{RKNSNodeNames.raw_root.value}",
