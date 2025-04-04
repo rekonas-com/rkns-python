@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Sequence, cast
 
 import rich
 import rich.tree
-from zarr.abc.store import Store
 
 from .generics import ZarrArray, ZarrGroup
 
@@ -31,7 +30,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike
 
-    from .types import CodecType
+    from .types import CodecType, Store
 
     T = TypeVar("T", bound=type)
 
@@ -47,26 +46,31 @@ class ZarrUtils(ABC):
         compressors: CodecType | None = None,
         **kwargs,
     ):
-        pass
+        raise NotImplementedError()
+
+    @staticmethod
+    @abstractmethod
+    def update_attributes(node: ZarrGroup | ZarrArray, attribute_dict: dict):
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def get_or_create_target_store(
         path_or_store: Any | Path | str, mode: Literal["r", "w", "a"] = "w"
     ) -> Store:
-        pass
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def copy_attributes(
         source: ZarrGroup | ZarrArray, target: ZarrGroup | ZarrArray
     ) -> None:
-        pass
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def copy_group_recursive(source_group: ZarrGroup, target_group: ZarrGroup) -> None:
-        pass
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
@@ -77,24 +81,24 @@ class ZarrUtils(ABC):
         compare_values: bool = True,
         compare_attributes: bool = True,
     ) -> bool:
-        pass
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def compare_attrs(attr1: JSON, attr2: JSON) -> bool:
-        pass
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def group_tree_with_attrs(
         group: ZarrGroup, max_depth: int | None = None, show_attrs: bool = True
     ) -> TreeRepr:
-        pass
+        raise NotImplementedError()
 
     @staticmethod
     @abstractmethod
     def get_codec(id: str, *args, **kwargs) -> CodecType:
-        pass
+        raise NotImplementedError()
 
 
 class TreeRepr:

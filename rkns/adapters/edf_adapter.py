@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyedflib
 
-from rkns._zarr import ZarrGroup, add_child_array, get_codec
+from rkns._zarr import ZarrGroup, add_child_array, get_codec, update_attributes
 from rkns.adapters.base import RKNSBaseAdapter
 from rkns.file_formats import FileFormat
 from rkns.util import RKNSNodeNames, get_freq_group
@@ -129,11 +129,11 @@ class RKNSEdfAdapter(RKNSBaseAdapter):
         fg_arrays, fg_attributes, rkns_attributes = self._extract_data(
             channel_data, signal_headers, header, validate=validate
         )
-        rkns_node.update_attributes(rkns_attributes)
+        update_attributes(rkns_node, rkns_attributes)
 
         for fg in fg_arrays.keys():
             fg_node = rkns_signals_node.create_group(fg)
-            fg_node.update_attributes(fg_attributes[fg])
+            update_attributes(fg_node, fg_attributes[fg])
             add_child_array(
                 parent_node=fg_node,
                 data=fg_arrays[fg]["signal"],

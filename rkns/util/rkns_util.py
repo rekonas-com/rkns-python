@@ -73,9 +73,11 @@ def check_rkns_validity(rkns_node: ZarrGroup | Any) -> None:
         f"/{RKNSNodeNames.rkns_annotations_group.value}",
     ]
     for expected_group in expected_children:
-        if expected_group not in rkns_node:
-            raise ValueError(f"Missing {expected_group=}. Invalid Format.")
-        elif not isinstance(rkns_node[expected_group], ZarrGroup):
+        if expected_group.strip("/") not in rkns_node:
+            raise ValueError(
+                f"Missing {expected_group=} as child of {rkns_node=}. Invalid Format."
+            )
+        elif not isinstance(rkns_node[expected_group.strip("/")], ZarrGroup):
             raise TypeError(
                 f"Expected {expected_group} to be a ZarrGroup, but it is {type(rkns_node[expected_group])}."
             )
@@ -116,9 +118,8 @@ def check_raw_validity(_raw_node: ZarrGroup | Any) -> None:
         )
 
     expected_children = [f"/{RKNSNodeNames.raw_signal.value}"]
-
     for expected_group in expected_children:
-        if expected_group not in _raw_node:
+        if expected_group.strip("/") not in _raw_node:
             raise ValueError(f"Missing {expected_group=}. Invalid Format.")
 
     _raw_signal = _raw_node[RKNSNodeNames.raw_signal.value]

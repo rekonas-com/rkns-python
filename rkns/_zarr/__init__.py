@@ -11,6 +11,7 @@ deep_compare_groups = zarr_utils.deep_compare_groups
 group_tree_with_attrs = zarr_utils.group_tree_with_attrs
 get_codec = zarr_utils.get_codec
 compare_attrs = zarr_utils.compare_attrs
+update_attributes = zarr_utils.update_attributes
 
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "get_codec",
     "compare_attrs",
     "StoreHandler",
+    "update_attributes",
 ]

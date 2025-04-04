@@ -70,6 +70,10 @@ class _ZarrV3Utils(ZarrUtils):
             zarr_array.update_attributes(attributes)
 
     @staticmethod
+    def update_attributes(node: ZarrGroup | ZarrArray, attribute_dict: dict):
+        node.update_attributes(attribute_dict)
+
+    @staticmethod
     def get_or_create_target_store(
         path_or_store: Store | Path | str, mode: Literal["r", "w", "a"] = "w"
     ) -> Store:
@@ -382,5 +386,5 @@ class _ZarrV3Utils(ZarrUtils):
         )
 
     @staticmethod
-    def get_codec(id: str, *args, **kwargs) -> CodecType:
-        return zarr.registry.get_codec_class(id)(*args, **kwargs)
+    def get_codec(id: str, **kwargs) -> CodecType:
+        return zarr.registry.get_codec_class(id)(**kwargs)

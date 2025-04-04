@@ -1,17 +1,23 @@
+from typing import cast
+
 import pytest
 import zarr
 
-# Skip the entire test module if Zarr is not version 3.x
-pytestmark = pytest.mark.skipif(
-    not zarr.__version__.startswith("2."), reason="Test requires Zarr v2.x"
-)
+# Skip the entire module if Zarr is not version 2.x
+if not zarr.__version__.startswith("2."):
+    pytest.skip("Test requires Zarr v2.x", allow_module_level=True)
 
 
 import numpy as np  # noqa: E402
 import zarr.codecs  # noqa: E402
 import zarr.storage  # noqa: E402
-from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle  # noqa: E402
-from zarr.storage import LocalStore, MemoryStore  # noqa: E402
+from numcodecs import Blosc  # noqa: E402
+
+# from zarr.codecs.blosc import BloscCname, BloscCodec, BloscShuffle  # noqa: E402
+from zarr.storage import (  # noqa: E402
+    DirectoryStore,
+    MemoryStore,
+)
 
 from rkns._zarr import (  # noqa: E402
     add_child_array,
@@ -33,19 +39,19 @@ from rkns.errors import (  # noqa: E402
 
 
 @pytest.fixture
-def temp_zarr_store():
+def temp_zarr_store() -> zarr.Group:
     """Create a temporary in-memory zarr store for testing."""
-    store = MemoryStore()
+    store = zarr.MemoryStore()
     root = zarr.open_group(store=store)
     return root
 
 
 @pytest.fixture
-def source_array(temp_zarr_store):
+def source_array(temp_zarr_store: zarr.Group) -> zarr.Array:
     """Create a source array with attributes for testing."""
-    array = temp_zarr_store.create_array(
-        "test_array", shape=(5, 5), dtype=np.float64, fill_value=1.0
-    )
+    array = temp_zarr_store.create(
+        shape=(5, 5), dtype=np.float64, fill_value=1.5, name="test_array"
+    )  # type: ignore
     array[:] = np.ones((5, 5))
     array.attrs["key1"] = "value1"
     array.attrs["key2"] = 42
@@ -53,18 +59,18 @@ def source_array(temp_zarr_store):
 
 
 @pytest.fixture
-def source_group(temp_zarr_store):
+def source_group(temp_zarr_store: zarr.Group):
     """Create a source group with arrays, subgroups and attributes for testing."""
     group = temp_zarr_store.create_group("test_group")
     group.attrs["group_attr1"] = "group_value1"
     group.attrs["group_attr2"] = [1, 2, 3]
 
     # Add arrays to the group
-    array1 = group.create_array("array1", shape=(3, 3), dtype=np.float64)
+    array1 = group.create("array1", shape=(3, 3), dtype=np.float64)
     array1[:] = np.ones((3, 3))
     array1.attrs["array1_attr"] = "array1_value"
 
-    array2 = group.create_array("array2", shape=(2, 4), dtype=np.float64)
+    array2 = group.create("array2", shape=(2, 4), dtype=np.float64)
     array2[:] = np.zeros((2, 4))
     array2.attrs["array2_attr"] = "array2_value"
 
@@ -72,7 +78,7 @@ def source_group(temp_zarr_store):
     subgroup = group.create_group("subgroup")
     subgroup.attrs["subgroup_attr"] = "subgroup_value"
 
-    subarray = subgroup.create_array("subarray", shape=(2, 2), dtype=np.float64)
+    subarray = subgroup.create("subarray", shape=(2, 2), dtype=np.float64)
     subarray[:] = np.ones((2, 2))
     subarray.attrs["subarray_attr"] = "subarray_value"
 
@@ -80,16 +86,19 @@ def source_group(temp_zarr_store):
 
 
 class TestCopyAttributesArray:
-    def test_copy_attributes_array(self, temp_zarr_store, source_array):
+    def test_copy_attributes_array(
+        self, temp_zarr_store: zarr.Group, source_array: zarr.Array
+    ):
         """Test copying attributes from one array to another."""
         # Create target array
-        target_array = temp_zarr_store.create_array(
-            "target_array", shape=(3, 3), dtype=np.float64
+        target_array = temp_zarr_store.create(
+            name="target_array", shape=(3, 3), dtype=np.float64
         )
 
         # Copy attributes
         copy_attributes(source_array, target_array)
 
+        target_array.attrs.asdict()
         # Verify attributes were copied
         assert target_array.attrs["key1"] == "value1"
         assert target_array.attrs["key2"] == 42
@@ -158,24 +167,19 @@ class TestCopyGroupRecursive:
         assert len(list(target_group.arrays())) == 0
         assert len(list(target_group.groups())) == 0
 
-    def test_copy_group_recursive_array_properties(self, temp_zarr_store):
+    def test_copy_group_recursive_array_properties(self, temp_zarr_store: zarr.Group):
         """Test that array properties like chunks, compressors and fill_value are preserved."""
         source_group = temp_zarr_store.create_group("source")
-
-        compressor = BloscCodec(
-            cname=BloscCname.zstd,  # Use enum instead of string
-            clevel=3,  # This is fine as int
-            shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
-            typesize=None,  # This is optional but can be specified if known
-        )
-        array = source_group.create_array(
+        compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE)
+        array = source_group.create(
             name="custom_array",
             shape=(10, 10),
             dtype=np.float64,
             chunks=(5, 5),
-            compressors=compressor,  # In v3, it's compressors (plural)
+            compressor=compressor,  # In v2, it's compressor (singular)
             fill_value=999.0,
         )
+
         array[:] = np.ones((10, 10))
 
         target_group = temp_zarr_store.create_group("target")
@@ -183,15 +187,13 @@ class TestCopyGroupRecursive:
         copy_group_recursive(source_group, target_group)
 
         # Verify array properties were preserved
-        target_array = target_group["custom_array"]
+        target_array: zarr.Array = cast(zarr.Array, target_group["custom_array"])
         assert target_array.chunks == (5, 5)
         assert target_array.fill_value == 999.0
-
         # Check compressor
-        assert isinstance(target_array.compressors[0], zarr.codecs.BloscCodec)
-        assert target_array.compressors[0].cname.value == "zstd"
-        assert target_array.compressors[0].clevel == 3
-        assert target_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+        assert isinstance(target_array.compressor, zarr.codecs.Blosc)
+        assert target_array.compressor.cname == "zstd"  # type: ignore
+        assert target_array.compressor.clevel == 3  # type: ignore
 
 
 class TestGetTargetStore:
@@ -200,9 +202,18 @@ class TestGetTargetStore:
 
         store = get_or_create_target_store(path)
 
-        assert isinstance(store, LocalStore)
+        assert isinstance(store, DirectoryStore)
 
-        assert store.root == path
+        assert str(store.path) == str(path)
+
+    def test_get_target_store_with_valid_path_zip(self, tmp_path):
+        path = tmp_path / "test_store.zip"
+
+        store = get_or_create_target_store(path)
+
+        assert isinstance(store, zarr.storage.ZipStore)
+
+        assert str(store.path) == str(path)
 
     def test_get_target_store_with_existing_path(self, tmp_path):
         path = tmp_path / "existing_store"
@@ -225,7 +236,7 @@ class TestGetTargetStore:
 
 @pytest.fixture
 def parent_node(tmp_path):
-    store = LocalStore(tmp_path)
+    store = DirectoryStore(tmp_path)
     return zarr.group(store=store)
 
 
@@ -290,13 +301,7 @@ class TestAddChildArray:
         self, parent_node, data, name, attributes
     ):
         # Define a compressor
-
-        compressor = BloscCodec(
-            cname=BloscCname.zstd,  # Use enum instead of string
-            clevel=3,  # This is fine as int
-            shuffle=BloscShuffle.bitshuffle,  # Use enum instead of int 2
-            typesize=None,  # This is optional but can be specified if known
-        )
+        compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE)
 
         # Call the function with compressors
         add_child_array(parent_node, data, name, attributes, compressors=compressor)
@@ -313,9 +318,8 @@ class TestAddChildArray:
         for key, value in attributes.items():
             assert zarr_array.attrs[key] == value
 
-        assert zarr_array.compressors[0].cname.value == "zstd"
-        assert zarr_array.compressors[0].clevel == 3
-        assert zarr_array.compressors[0].shuffle == BloscShuffle.bitshuffle
+        assert zarr_array.compressor.cname == "zstd"
+        assert zarr_array.compressor.clevel == 3
 
 
 # Test cases for _compare_attrs function
@@ -371,7 +375,7 @@ def generate_group(path="group1") -> zarr.Group:
     return group
 
 
-def test_deep_compare_async_groups_success():
+def test_deep_compare_groups_success():
     group1 = generate_group("group1")
     group2 = generate_group("group1")
     assert deep_compare_groups(group1, group2)
@@ -406,8 +410,8 @@ def test_deep_compare_async_groups_path_mismatch():
 def test_deep_compare_async_groups_array_shape_mismatch():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    mock_group1.create_array("array1", dtype=np.float32, shape=(3,))
-    mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    mock_group1.create("array1", dtype=np.float32, shape=(3,))
+    mock_group2.create("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(ArrayShapeMismatchError):
         deep_compare_groups(mock_group1, mock_group2)
@@ -416,8 +420,8 @@ def test_deep_compare_async_groups_array_shape_mismatch():
 def test_deep_compare_async_groups_array_shape_match():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    arr1 = mock_group1.create_array("array1", dtype=np.float32, shape=(4,))
-    arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    arr1 = mock_group1.create("array1", dtype=np.float32, shape=(4,))
+    arr2 = mock_group2.create("array1", dtype=np.float32, shape=(4,))
 
     arr1[:] = np.zeros(4)
     arr2[:] = np.zeros(4)
@@ -428,8 +432,8 @@ def test_deep_compare_async_groups_array_shape_match():
 def test_deep_compare_async_groups_array_value_mismatch():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
-    arr1 = mock_group1.create_array("array1", dtype=np.float32, shape=(4,))
-    arr2 = mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    arr1 = mock_group1.create("array1", dtype=np.float32, shape=(4,))
+    arr2 = mock_group2.create("array1", dtype=np.float32, shape=(4,))
 
     arr1[:] = np.zeros(4)
     arr2[:] = np.ones(4)
@@ -481,7 +485,7 @@ def test_deep_compare_async_groups_array_and_group():
     mock_group1 = generate_group()
     mock_group2 = generate_group()
     mock_group1.create_group("abca")
-    mock_group2.create_array("array1", dtype=np.float32, shape=(4,))
+    mock_group2.create("array1", dtype=np.float32, shape=(4,))
 
     with pytest.raises(GroupComparisonError):
         deep_compare_groups(mock_group1, mock_group2)
