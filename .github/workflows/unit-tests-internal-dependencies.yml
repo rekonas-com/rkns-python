@@ -3,8 +3,6 @@ name: Python Tests (Internal Dependencies)
 # Will be removed later on and _not_ be a blocking point for progress.
 
 on:
-  push:
-    branches: [ dev ]
   pull_request:
     branches: [ main, dev ]
 

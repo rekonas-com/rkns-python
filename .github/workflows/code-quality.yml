@@ -1,15 +1,13 @@
 name: Code Quality
 
 on:
-  push:
-    branches: [ dev ]
-    paths:
-      - '**.py'
-      - 'pyproject.toml'
-      - 'poetry.lock'
-      - '.github/workflows/code-quality.yml'
   pull_request:
     branches: [ main, dev ]
+
+# interrupt earlier tests if one quickly pushes multiple times..
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
