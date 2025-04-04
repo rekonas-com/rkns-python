@@ -42,7 +42,7 @@
     }
   },
   // Make sure to download the test file on devcontainer creation
-  "postCreateCommand": "poetry install --with dev,test --no-interaction",
+  "postCreateCommand": "git config --global core.editor 'code --wait'; poetry install --with dev,test --no-interaction",
   "forwardPorts": [],
   "mounts": [
     "source=${localWorkspaceFolder},target=/workspaces/rkns,type=bind,consistency=cached"
