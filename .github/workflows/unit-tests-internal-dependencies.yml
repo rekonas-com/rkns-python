@@ -63,13 +63,13 @@ jobs:
     
     - name: Update zarr dependency specification
       run: |
+        # Explicitly remove the lock file to ensure fresh dependency resolution for each Python version
+        rm -f poetry.lock
         poetry remove zarr rich numpy
         poetry add ${{ matrix.zarr-version }} ${{ matrix.rich-version }} ${{ matrix.numpy-version }}
         
     - name: Install dependencies from scratch
       run: |
-        # Explicitly remove the lock file to ensure fresh dependency resolution for each Python version
-        rm -f poetry.lock
         poetry install --with dev,test --no-interaction --no-cache
         
     - name: Run tests
