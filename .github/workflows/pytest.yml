@@ -7,13 +7,32 @@ on:
     branches: [ main, dev ]
 
 jobs:
+  determine-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      python-versions: ${{ steps.set-matrix.outputs.python-versions }}
+      zarr-versions: ${{ steps.set-matrix.outputs.zarr-versions }}
+    steps:
+      - id: set-matrix
+        run: |
+          # For main branch, test all combinations
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
+            echo "python-versions=['3.11', '3.12', '3.13']" >> $GITHUB_OUTPUT
+            echo "zarr-versions=['zarr ^2', 'zarr ^3']" >> $GITHUB_OUTPUT
+          else
+            # For other branches, just test with latest Python and Zarr
+            echo "python-versions=['3.11']" >> $GITHUB_OUTPUT
+            echo "zarr-versions=['zarr ^3', 'zarr ^v3']" >> $GITHUB_OUTPUT
+          fi
+          
   test:
+    needs: determine-matrix
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        python-version: ["3.11"] ## , "3.12", "3.13"]
-        zarr-version: ["zarr ^2", "zarr ^3"]
+        python-version: ${{ fromJson(needs.determine-matrix.outputs.python-versions) }}
+        zarr-version: ${{ fromJson(needs.determine-matrix.outputs.zarr-versions) }}
 
     steps:
     - uses: actions/checkout@v3
@@ -37,7 +56,7 @@ jobs:
         path: tests/files
         # Using a versioned key allows you to invalidate cache when test files change
         key: test-files-v1
-         
+        
     - name: Download test files if not cached
       if: steps.cache-test-files.outputs.cache-hit != 'true'
       run: |
@@ -45,10 +64,15 @@ jobs:
         # Download the test file
         wget -q "https://www.teuniz.net/edf_bdf_testfiles/test_generator.zip" -O test_generator.zip 
         unzip -q test_generator.zip -d test_generator
-        # Move the needed file (adjust path as needed)
-        mv test_generator/[appropriate_file].edf tests/files/test_file.edf
+        # Find and move the test_file.edf to the correct location
+        find test_generator -name "*.edf" -exec cp {} tests/files/test_file.edf \;
         # Clean up
         rm -rf test_generator test_generator.zip
+        # Verify file exists
+        if [ ! -f tests/files/test_file.edf ]; then
+          echo "Error: Could not find or create test_file.edf"
+          exit 1
+        fi
     
     - name: Update zarr dependency specification
       run: |
